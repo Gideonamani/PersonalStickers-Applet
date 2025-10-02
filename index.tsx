@@ -51,7 +51,7 @@ const downloadImage = (imageUrl: string, filename: string) => {
 
 const Header = () => (
   <header className="app-header">
-    <h1>My Personal Stickers</h1>
+    <h1>StickerMe</h1>
   </header>
 );
 
