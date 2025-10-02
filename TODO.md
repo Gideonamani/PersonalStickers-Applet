@@ -5,7 +5,7 @@ This file tracks potential features and enhancements for the application.
 ### Enhanced Customization & Control
 
 - [ ] **Custom Expressions:** Allow users to add their own text prompts for expressions (e.g., "Mind Blown," "Sipping Tea") instead of being limited to the predefined list.
-- [ ] **Style Selection:** Add a dropdown to let users choose the artistic style of their stickers, such as "Pixel Art," "Anime," "3D Render," or "Vintage Comic."
+- [x] **Style Selection:** Add a dropdown to let users choose the artistic style of their stickers, such as "Photo-realistic," "Anime," or "3D Render."
 - [ ] **Negative Prompts:** Include an input field for things to *exclude* from the image (e.g., "no text," "no hats") to help refine the AI's output.
 
 ### Better User Experience (UX)

@@ -139,6 +139,8 @@ const StickerCreator = ({
   onBackgroundColorChange,
   transparentBackground,
   onTransparentChange,
+  artisticStyle,
+  onArtisticStyleChange,
 }: {
   characterImage: string | null;
   onFileSelect: (file: File | null | undefined) => void;
@@ -148,6 +150,8 @@ const StickerCreator = ({
   onBackgroundColorChange: (event: ChangeEvent<HTMLInputElement>) => void;
   transparentBackground: boolean;
   onTransparentChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  artisticStyle: string;
+  onArtisticStyleChange: (event: ChangeEvent<HTMLSelectElement>) => void;
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -207,9 +211,17 @@ const StickerCreator = ({
             <h4>How it works:</h4>
             <ol>
                 <li><span>Upload a photo</span> of a person, pet, or character.</li>
-                <li><span>Choose a background</span> — transparent or a solid color.</li>
+                <li><span>Choose your style</span> and background options.</li>
                 <li><span>Generate Stickers</span> and watch the AI create a unique pack!</li>
             </ol>
+        </div>
+        <div className="style-controls">
+          <label htmlFor="artisticStyle">Artistic Style</label>
+          <select id="artisticStyle" value={artisticStyle} onChange={onArtisticStyleChange}>
+            <option value="Photo-realistic">Photo-realistic</option>
+            <option value="Anime">Anime</option>
+            <option value="3D Render">3D Render</option>
+          </select>
         </div>
         <div className="background-controls">
             <input
@@ -324,6 +336,8 @@ const App = () => {
   const [transparentBackground, setTransparentBackground] = useState(true);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isCropModalOpen, setCropModalOpen] = useState(false);
+  const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
+
 
   const handleFileSelect = (file: File | null | undefined) => {
     if (file && file.type.startsWith('image/')) {
@@ -371,12 +385,26 @@ const App = () => {
       ? 'a clean, transparent background'
       : `a solid background of the hex color ${backgroundColor}`;
 
+    let styleInstruction = '';
+    switch (artisticStyle) {
+        case 'Anime':
+        styleInstruction = 'a vibrant Anime/Manga style';
+        break;
+        case '3D Render':
+        styleInstruction = 'a polished 3D render style, similar to modern animated films';
+        break;
+        case 'Photo-realistic':
+        default:
+        styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph';
+        break;
+    }
+
     try {
       for (const expression of EXPRESSIONS) {
         setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' } : s));
 
         try {
-            const prompt = `Generate a vibrant, cartoon-style sticker of the character showing a "${expression.label}" expression. The artistic style MUST be consistent across all stickers. The sticker must have ${backgroundInstruction} and a subtle white outline. Do not use photorealistic styles or add extra background elements.`;
+            const prompt = `Generate a sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
             
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash-image',
@@ -465,6 +493,8 @@ const App = () => {
           onBackgroundColorChange={(e) => setBackgroundColor(e.target.value)}
           transparentBackground={transparentBackground}
           onTransparentChange={(e) => setTransparentBackground(e.target.checked)}
+          artisticStyle={artisticStyle}
+          onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
         />
         {error && <div className="error-message">{error}</div>}
         <hr className="divider" />
