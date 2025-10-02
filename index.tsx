@@ -6,6 +6,8 @@ import React, { useState, ChangeEvent, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Modality } from '@google/genai';
 import JSZip from 'jszip';
+import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
+
 import './index.css';
 
 // --- Gemini API Configuration ---
@@ -46,7 +48,6 @@ const downloadImage = (imageUrl: string, filename: string) => {
   document.body.removeChild(link);
 };
 
-
 // --- React Components ---
 
 const Header = () => (
@@ -54,6 +55,80 @@ const Header = () => (
     <h1>StickerMe</h1>
   </header>
 );
+
+const ImageCropper = ({
+    imageSrc,
+    onSave,
+    onCancel,
+  }: {
+    imageSrc: string;
+    onSave: (croppedImageDataUrl: string) => void;
+    onCancel: () => void;
+  }) => {
+    const [crop, setCrop] = useState<Crop>();
+    const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+    const imgRef = useRef<HTMLImageElement>(null);
+  
+    function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+      const { width, height } = e.currentTarget;
+      const initialCrop = centerCrop(
+        makeAspectCrop({ unit: '%', width: 90 }, 1, width, height),
+        width,
+        height
+      );
+      setCrop(initialCrop);
+    }
+  
+    const handleCrop = async () => {
+      if (completedCrop?.width && completedCrop?.height && imgRef.current) {
+        const canvas = document.createElement('canvas');
+        const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
+        const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
+        canvas.width = completedCrop.width;
+        canvas.height = completedCrop.height;
+        const ctx = canvas.getContext('2d');
+  
+        if (ctx) {
+          ctx.drawImage(
+            imgRef.current,
+            completedCrop.x * scaleX,
+            completedCrop.y * scaleY,
+            completedCrop.width * scaleX,
+            completedCrop.height * scaleY,
+            0,
+            0,
+            completedCrop.width,
+            completedCrop.height
+          );
+          const base64Image = canvas.toDataURL('image/png');
+          onSave(base64Image);
+        }
+      }
+    };
+  
+    return (
+      <div className="crop-modal">
+        <div className="crop-modal-content">
+          <h3>Crop your image</h3>
+          <p>Select the portion of the image you want to turn into a sticker.</p>
+          <div className="crop-container">
+            <ReactCrop
+              crop={crop}
+              onChange={(_, percentCrop) => setCrop(percentCrop)}
+              onComplete={(c) => setCompletedCrop(c)}
+              aspect={1}
+            >
+              <img ref={imgRef} src={imageSrc} onLoad={onImageLoad} alt="Image to crop"/>
+            </ReactCrop>
+          </div>
+          <div className="crop-modal-actions">
+            <button onClick={onCancel} className="crop-button secondary">Cancel</button>
+            <button onClick={handleCrop} className="crop-button primary">Crop & Use</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
 const StickerCreator = ({
   characterImage,
@@ -247,26 +322,39 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
   const [transparentBackground, setTransparentBackground] = useState(true);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [isCropModalOpen, setCropModalOpen] = useState(false);
 
   const handleFileSelect = (file: File | null | undefined) => {
     if (file && file.type.startsWith('image/')) {
       setOriginalFilename(file.name);
       const reader = new FileReader();
       reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        setUserImage({
-          data: dataUrl,
-          mimeType: file.type,
-        });
-        // Reset stickers when a new image is uploaded
-        setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' })));
-        setError(null);
+        setImageToCrop(reader.result as string);
+        setCropModalOpen(true);
       };
       reader.readAsDataURL(file);
     } else if (file) {
       setError("Please select a valid image file (e.g., PNG, JPG, GIF).");
     }
   };
+
+  const handleCropSave = (croppedImageDataUrl: string) => {
+    setUserImage({
+      data: croppedImageDataUrl,
+      mimeType: 'image/png', // Canvas output is always png
+    });
+    // Reset stickers when a new image is uploaded
+    setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' })));
+    setError(null);
+    setCropModalOpen(false);
+  };
+
+  const handleCropCancel = () => {
+    setCropModalOpen(false);
+    setImageToCrop(null);
+  };
+
 
   const handleGenerate = async () => {
     if (!userImage) {
@@ -361,6 +449,13 @@ const App = () => {
     <>
       <Header />
       <main>
+        {isCropModalOpen && imageToCrop && (
+          <ImageCropper
+            imageSrc={imageToCrop}
+            onSave={handleCropSave}
+            onCancel={handleCropCancel}
+          />
+        )}
         <StickerCreator
           characterImage={characterImage}
           onFileSelect={handleFileSelect}
