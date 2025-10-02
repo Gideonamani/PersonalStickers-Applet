@@ -1,0 +1,5 @@
+{
+  "name": "Personal Stickers",
+  "description": "Takes in an image and create custom stickers based on it",
+  "requestFramePermissions": []
+}
