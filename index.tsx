@@ -174,10 +174,12 @@ const DownloadIcon = () => (
 );
 
 
-const StickerItem = ({ sticker }: { sticker: { imageUrl: string | null; label: string; emoji: string } }) => {
+const StickerItem = ({ sticker, originalFilename }: { sticker: { imageUrl: string | null; label: string; emoji: string }, originalFilename: string | null }) => {
     const handleDownload = () => {
         if (sticker.imageUrl) {
-          downloadImage(sticker.imageUrl, `${sticker.label.replace(/\s+/g, '_')}_sticker.png`);
+          const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
+          const stickerName = sticker.label.replace(/\s+/g, '_');
+          downloadImage(sticker.imageUrl, `${prefix}_${stickerName}.png`);
         }
       };
 
@@ -202,16 +204,17 @@ const StickerItem = ({ sticker }: { sticker: { imageUrl: string | null; label: s
   );
 };
 
-const StickerGrid = ({ stickers, isLoading }: { stickers: any[]; isLoading: boolean; }) => (
+const StickerGrid = ({ stickers, isLoading, originalFilename }: { stickers: any[]; isLoading: boolean; originalFilename: string | null; }) => (
   <section className={`sticker-grid ${isLoading ? 'loading' : ''}`}>
     {stickers.map((sticker) => (
-      <StickerItem key={sticker.label} sticker={sticker} />
+      <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} />
     ))}
   </section>
 );
 
 const App = () => {
   const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
+  const [originalFilename, setOriginalFilename] = useState<string | null>(null);
   const [stickers, setStickers] = useState(
     EXPRESSIONS.map(e => ({ ...e, imageUrl: null }))
   );
@@ -222,6 +225,7 @@ const App = () => {
 
   const handleFileSelect = (file: File | null | undefined) => {
     if (file && file.type.startsWith('image/')) {
+      setOriginalFilename(file.name);
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
@@ -294,9 +298,11 @@ const App = () => {
 
     if (generatedStickers.length === 0) return;
 
+    const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'my';
+
     generatedStickers.forEach(sticker => {
       const base64Data = dataUrlToBase64(sticker.imageUrl!);
-      const filename = `${sticker.label.replace(/\s+/g, '_')}.png`;
+      const filename = `${prefix}_${sticker.label.replace(/\s+/g, '_')}.png`;
       zip.file(filename, base64Data, { base64: true });
     });
 
@@ -304,7 +310,7 @@ const App = () => {
       const url = URL.createObjectURL(content);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'sticker_pack.zip';
+      link.download = `${prefix}_sticker_pack.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -331,7 +337,7 @@ const App = () => {
         />
         {error && <div className="error-message">{error}</div>}
         <hr className="divider" />
-        <StickerGrid stickers={stickers} isLoading={isLoading} />
+        <StickerGrid stickers={stickers} isLoading={isLoading} originalFilename={originalFilename} />
         {hasGeneratedStickers && !isLoading && (
             <div className="download-all-container">
                 <button onClick={handleDownloadAll} className="download-all-button">
