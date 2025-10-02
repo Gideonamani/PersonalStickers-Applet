@@ -25,6 +25,15 @@ const EXPRESSIONS = [
   { emoji: '🤔', label: 'Curious thinking' },
 ];
 
+type StickerStatus = 'idle' | 'loading' | 'done' | 'error';
+type Sticker = {
+    emoji: string;
+    label: string;
+    imageUrl: string | null;
+    status: StickerStatus;
+};
+
+
 // --- Helper Functions ---
 const dataUrlToBase64 = (dataUrl: string) => dataUrl.split(',')[1];
 
@@ -174,7 +183,7 @@ const DownloadIcon = () => (
 );
 
 
-const StickerItem = ({ sticker, originalFilename }: { sticker: { imageUrl: string | null; label: string; emoji: string }, originalFilename: string | null }) => {
+const StickerItem = ({ sticker, originalFilename }: { sticker: Sticker, originalFilename: string | null }) => {
     const handleDownload = () => {
         if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
@@ -182,18 +191,28 @@ const StickerItem = ({ sticker, originalFilename }: { sticker: { imageUrl: strin
           downloadImage(sticker.imageUrl, `${prefix}_${stickerName}.png`);
         }
       };
+    
+      const renderContent = () => {
+        switch (sticker.status) {
+          case 'loading':
+            return <div className="spinner"></div>;
+          case 'done':
+            return <img src={sticker.imageUrl!} alt={sticker.label} className="sticker-image" />;
+          case 'error':
+            return <span className="sticker-emoji" role="img" aria-label="Error">⚠️</span>;
+          case 'idle':
+          default:
+            return <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>;
+        }
+      };
 
   return (
     <div className="sticker-item">
       <div className="sticker-placeholder">
-        {sticker.imageUrl ? (
-          <img src={sticker.imageUrl} alt={sticker.label} className="sticker-image" />
-        ) : (
-          <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>
-        )}
+        {renderContent()}
         <div className="sticker-label">
             <span>{sticker.label}</span>
-            {sticker.imageUrl && (
+            {sticker.imageUrl && sticker.status === 'done' && (
               <button onClick={handleDownload} className="download-button" aria-label={`Download ${sticker.label} sticker`}>
                 <DownloadIcon />
               </button>
@@ -204,19 +223,25 @@ const StickerItem = ({ sticker, originalFilename }: { sticker: { imageUrl: strin
   );
 };
 
-const StickerGrid = ({ stickers, isLoading, originalFilename }: { stickers: any[]; isLoading: boolean; originalFilename: string | null; }) => (
-  <section className={`sticker-grid ${isLoading ? 'loading' : ''}`}>
+const StickerGrid = ({ stickers, originalFilename }: { stickers: Sticker[]; originalFilename: string | null; }) => (
+  <section className="sticker-grid">
     {stickers.map((sticker) => (
       <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} />
     ))}
   </section>
 );
 
+const Footer = () => (
+    <footer className="app-footer">
+      Built with enthusiasm by Keon on AI Studio
+    </footer>
+  );
+
 const App = () => {
   const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
-  const [stickers, setStickers] = useState(
-    EXPRESSIONS.map(e => ({ ...e, imageUrl: null }))
+  const [stickers, setStickers] = useState<Sticker[]>(
+    EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' }))
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +258,9 @@ const App = () => {
           data: dataUrl,
           mimeType: file.type,
         });
+        // Reset stickers when a new image is uploaded
+        setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' })));
+        setError(null);
       };
       reader.readAsDataURL(file);
     } else if (file) {
@@ -247,7 +275,7 @@ const App = () => {
     }
     setIsLoading(true);
     setError(null);
-    setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null }))); // Reset stickers
+    setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' }))); // Reset stickers
 
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
 
@@ -257,36 +285,44 @@ const App = () => {
 
     try {
       for (const expression of EXPRESSIONS) {
-        const prompt = `Generate a vibrant, cartoon-style sticker of the character showing a "${expression.label}" expression. The artistic style MUST be consistent across all stickers. The sticker must have ${backgroundInstruction} and a subtle white outline. Do not use photorealistic styles or add extra background elements.`;
-        
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: {
-            parts: [
-              { inlineData: { data: sourceImage.data, mimeType: sourceImage.mimeType } },
-              { text: prompt },
-            ],
-          },
-          config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
-          },
-        });
-        
-        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (imagePart?.inlineData) {
-          const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-          setStickers(prevStickers =>
-            prevStickers.map(s =>
-              s.label === expression.label ? { ...s, imageUrl } : s
-            )
-          );
-        } else {
-            console.warn(`No image generated for: ${expression.label}`);
+        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' } : s));
+
+        try {
+            const prompt = `Generate a vibrant, cartoon-style sticker of the character showing a "${expression.label}" expression. The artistic style MUST be consistent across all stickers. The sticker must have ${backgroundInstruction} and a subtle white outline. Do not use photorealistic styles or add extra background elements.`;
+            
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash-image',
+              contents: {
+                parts: [
+                  { inlineData: { data: sourceImage.data, mimeType: sourceImage.mimeType } },
+                  { text: prompt },
+                ],
+              },
+              config: {
+                responseModalities: [Modality.IMAGE, Modality.TEXT],
+              },
+            });
+            
+            const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (imagePart?.inlineData) {
+              const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+              setStickers(prevStickers =>
+                prevStickers.map(s =>
+                  s.label === expression.label ? { ...s, imageUrl, status: 'done' } : s
+                )
+              );
+            } else {
+                console.warn(`No image generated for: ${expression.label}`);
+                setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' } : s));
+            }
+        } catch(err) {
+            console.error(`Error generating sticker for ${expression.label}:`, err);
+            setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' } : s));
         }
       }
     } catch (err) {
-      console.error('Error generating stickers:', err);
-      setError('Sorry, something went wrong while creating the stickers. Please try again.');
+      console.error('Error during generation process:', err);
+      setError('Sorry, a major error occurred while creating the stickers. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -294,7 +330,7 @@ const App = () => {
 
   const handleDownloadAll = () => {
     const zip = new JSZip();
-    const generatedStickers = stickers.filter(s => s.imageUrl);
+    const generatedStickers = stickers.filter(s => s.imageUrl && s.status === 'done');
 
     if (generatedStickers.length === 0) return;
 
@@ -337,7 +373,7 @@ const App = () => {
         />
         {error && <div className="error-message">{error}</div>}
         <hr className="divider" />
-        <StickerGrid stickers={stickers} isLoading={isLoading} originalFilename={originalFilename} />
+        <StickerGrid stickers={stickers} originalFilename={originalFilename} />
         {hasGeneratedStickers && !isLoading && (
             <div className="download-all-container">
                 <button onClick={handleDownloadAll} className="download-all-button">
@@ -346,6 +382,7 @@ const App = () => {
             </div>
         )}
       </main>
+      <Footer />
     </>
   );
 };
