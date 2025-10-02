@@ -48,7 +48,7 @@ const Header = () => (
 
 const StickerCreator = ({
   characterImage,
-  onImageUpload,
+  onFileSelect,
   onGenerate,
   isLoading,
   backgroundColor,
@@ -57,7 +57,7 @@ const StickerCreator = ({
   onTransparentChange,
 }: {
   characterImage: string | null;
-  onImageUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onFileSelect: (file: File | null | undefined) => void;
   onGenerate: () => void;
   isLoading: boolean;
   backgroundColor: string;
@@ -66,14 +66,55 @@ const StickerCreator = ({
   onTransparentChange: (event: ChangeEvent<HTMLInputElement>) => void;
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); // Necessary to allow drop
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      onFileSelect(file);
+    }
+  };
+
+  const handleDisplayClick = () => {
+    fileInputRef.current?.click();
+  };
+
 
   return (
     <div className="sticker-creator">
-      <div className="character-display">
+      <div
+        className={`character-display ${isDragging ? 'drag-over' : ''}`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={handleDisplayClick}
+        role="button"
+        tabIndex={0}
+      >
         {characterImage ? (
             <img src={characterImage} alt="Uploaded character" className="character-image" />
         ) : (
-            <div className="character-placeholder">📷</div>
+            <div className="character-placeholder">
+              <span>📷</span>
+              <span className="placeholder-text">Drag & drop an image or click to upload</span>
+            </div>
         )}
       </div>
       <div className="creator-controls">
@@ -107,12 +148,12 @@ const StickerCreator = ({
             <input
                 type="file"
                 accept="image/*"
-                onChange={onImageUpload}
+                onChange={(e) => onFileSelect(e.target.files?.[0])}
                 style={{ display: 'none' }}
                 ref={fileInputRef}
                 id="imageUpload"
             />
-            <label htmlFor="imageUpload" className="upload-button">
+             <label htmlFor="imageUpload" className="upload-button">
                 Upload Image
             </label>
             <button onClick={onGenerate} className="generate-button" disabled={isLoading || !characterImage}>
@@ -179,9 +220,8 @@ const App = () => {
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
   const [transparentBackground, setTransparentBackground] = useState(true);
 
-  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
+  const handleFileSelect = (file: File | null | undefined) => {
+    if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
@@ -191,6 +231,8 @@ const App = () => {
         });
       };
       reader.readAsDataURL(file);
+    } else if (file) {
+      setError("Please select a valid image file (e.g., PNG, JPG, GIF).");
     }
   };
 
@@ -279,7 +321,7 @@ const App = () => {
       <main>
         <StickerCreator
           characterImage={characterImage}
-          onImageUpload={handleImageUpload}
+          onFileSelect={handleFileSelect}
           onGenerate={handleGenerate}
           isLoading={isLoading}
           backgroundColor={backgroundColor}

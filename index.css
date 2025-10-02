@@ -54,6 +54,8 @@ main {
   flex-basis: 200px;
   flex-grow: 1;
   max-width: 250px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
 }
 
 .character-image {
@@ -71,15 +73,33 @@ main {
   width: 100%;
   height: 250px;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 0.5rem;
   background-color: #f8f9fa;
   border-radius: 8px;
   border: 2px dashed #e0e0e0;
-  font-size: 5rem;
   color: #bdbdbd;
+  transition: border-color 0.2s, background-color 0.2s, color 0.2s;
 }
 
+.character-placeholder span:first-child {
+    font-size: 4rem;
+}
+
+.placeholder-text {
+  font-size: 0.9rem;
+  color: #666;
+  text-align: center;
+  padding: 0 1rem;
+}
+
+.character-display.drag-over .character-placeholder {
+    border-color: #4a90e2;
+    background-color: #e9f2fd;
+    color: #4a90e2;
+}
 
 .creator-controls {
   flex-basis: 300px;
