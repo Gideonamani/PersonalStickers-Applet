@@ -28,11 +28,11 @@ const INITIAL_EXPRESSIONS = [
 ];
 
 const POPULAR_EMOJIS = [
-    '😂', '❤️', '😊', '👍', '🥰', '🤔', '🙏', '🎉', '🥳', '😭', 
-    '😍', '😢', '😎', '😮', '🤯', '😴', '😡', '🥺', '🤗', '🤫',
-    '✨', '🚀', '💯', '🔥', '💰', '💻', '📱', '🍔', '🍕', '🎂', 
-    '🎁', '🎈', '🌟', '💡', '🔑', '🔒', '🎵', '🎯', '🏆', '🥇',
-    '🐶', '🐱', '🦄', '🦊', '🌍', '☀️', '🌙', '🌸', '🌳', '🌊'
+    '😊', '😂', '😍', '🥰', '😎', '🤔', '😉', '😋', '😜', '🤪', 
+    '🤩', '🥳', '😏', '😒', '😞', '😔', '😢', '😭', '😱', '😡',
+    '😠', '🤯', '🥺', '🤗', '🤫', '😬', '🙄', '🤤', '😴', '🤧',
+    '😇', '🤣', '😅', '😆', '🥲', '😘', '🤨', '🧐', '🤓', '😮',
+    '😲', '😳', '😨', '😥', '👍', '👎', '👌', '✌️', '👏', '🙏'
 ];
 
 
@@ -566,7 +566,6 @@ const App = () => {
             setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
         }
       }
-// Fix: Corrected a malformed try...catch block by adding curly braces.
     } catch (err) {
       console.error('Error during generation process:', err);
       setError('Sorry, a major error occurred while creating the stickers. Please try again.');
@@ -603,6 +602,7 @@ const App = () => {
 
   const characterImage = userImage?.data || null;
   const hasGeneratedStickers = stickers.some(s => s.imageUrl);
+  const hasGenerationStarted = stickers.some(s => s.status !== 'idle');
 
   return (
     <>
@@ -627,27 +627,33 @@ const App = () => {
           artisticStyle={artisticStyle}
           onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
         />
-        <hr className="divider" />
-        <ExpressionManager 
+        <ExpressionManager
           expressions={expressions}
           onAdd={handleAddExpression}
           onRemove={handleRemoveExpression}
         />
-        {error && <div className="error-message" onClick={() => setError(null)}>{error}</div>}
-        <hr className="divider" />
-        <StickerGrid stickers={stickers} originalFilename={originalFilename} />
-        {hasGeneratedStickers && !isLoading && (
-            <div className="download-all-container">
-                <button onClick={handleDownloadAll} className="download-all-button">
-                Download All Stickers
-                </button>
-            </div>
-        )}
+        <div className="generation-results">
+            {hasGenerationStarted && (
+                <>
+                    <h2>Your Sticker Pack</h2>
+                    <div className="results-header">
+                        <p>Here are your generated stickers. Download them individually or all at once!</p>
+                        <button onClick={handleDownloadAll} className="download-all-button" disabled={!hasGeneratedStickers}>
+                            <DownloadIcon />
+                            Download All (.zip)
+                        </button>
+                    </div>
+                </>
+            )}
+            {error && <p className="error-message" onClick={() => setError(null)}>{error}</p>}
+            <StickerGrid stickers={stickers} originalFilename={originalFilename} />
+        </div>
       </main>
       <Footer />
     </>
   );
 };
 
-const root = createRoot(document.getElementById('root')!);
+const container = document.getElementById('root');
+const root = createRoot(container!);
 root.render(<App />);
