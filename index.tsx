@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, ChangeEvent, useRef } from 'react';
+import React, { useState, ChangeEvent, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Modality } from '@google/genai';
 import JSZip from 'jszip';
@@ -14,7 +14,7 @@ import './index.css';
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- App Constants ---
-const EXPRESSIONS = [
+const INITIAL_EXPRESSIONS = [
   { emoji: '👍', label: 'Thumbs up' },
   { emoji: '😏', label: 'Cheeky smile' },
   { emoji: '😉', label: 'Naughty wink' },
@@ -27,12 +27,25 @@ const EXPRESSIONS = [
   { emoji: '🤔', label: 'Curious thinking' },
 ];
 
+const POPULAR_EMOJIS = [
+    '😂', '❤️', '😊', '👍', '🥰', '🤔', '🙏', '🎉', '🥳', '😭', 
+    '😍', '😢', '😎', '😮', '🤯', '😴', '😡', '🥺', '🤗', '🤫',
+    '✨', '🚀', '💯', '🔥', '💰', '💻', '📱', '🍔', '🍕', '🎂', 
+    '🎁', '🎈', '🌟', '💡', '🔑', '🔒', '🎵', '🎯', '🏆', '🥇',
+    '🐶', '🐱', '🦄', '🦊', '🌍', '☀️', '🌙', '🌸', '🌳', '🌊'
+];
+
+
 type StickerStatus = 'idle' | 'loading' | 'done' | 'error';
 type Sticker = {
     emoji: string;
     label: string;
     imageUrl: string | null;
     status: StickerStatus;
+};
+type Expression = {
+    emoji: string;
+    label: string;
 };
 
 
@@ -105,9 +118,15 @@ const ImageCropper = ({
         }
       }
     };
+
+    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.target === e.currentTarget) {
+          onCancel();
+        }
+    };
   
     return (
-      <div className="crop-modal">
+      <div className="crop-modal" onClick={handleBackdropClick}>
         <div className="crop-modal-content">
           <h3>Crop your image</h3>
           <p>Select the portion of the image you want to turn into a sticker.</p>
@@ -261,6 +280,90 @@ const StickerCreator = ({
   );
 };
 
+const EmojiPicker = ({ onSelect }: { onSelect: (emoji: string) => void }) => {
+    return (
+      <div className="emoji-picker">
+        {POPULAR_EMOJIS.map(emoji => (
+          <button key={emoji} onClick={() => onSelect(emoji)} className="emoji-picker-btn">
+            {emoji}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+const ExpressionManager = ({
+    expressions,
+    onAdd,
+    onRemove,
+  }: {
+    expressions: Expression[];
+    onAdd: (expression: Expression) => void;
+    onRemove: (label: string) => void;
+  }) => {
+    const [newEmoji, setNewEmoji] = useState('');
+    const [newLabel, setNewLabel] = useState('');
+    const [isPickerOpen, setPickerOpen] = useState(false);
+    const pickerRef = useRef<HTMLDivElement>(null);
+  
+    const handleAdd = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (newEmoji && newLabel) {
+        onAdd({ emoji: newEmoji, label: newLabel });
+        setNewEmoji('');
+        setNewLabel('');
+      }
+    };
+
+    const handleEmojiSelect = (emoji: string) => {
+        setNewEmoji(emoji);
+        setPickerOpen(false);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+          if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+            setPickerOpen(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+          document.removeEventListener('mousedown', handleClickOutside);
+        };
+      }, []);
+  
+    return (
+      <div className="expression-manager">
+        <h3>Manage Expressions</h3>
+        <div className="expression-list">
+          {expressions.map((exp) => (
+            <div key={exp.label} className="expression-tag">
+              <span>{exp.emoji} {exp.label}</span>
+              <button onClick={() => onRemove(exp.label)} className="remove-expression-btn" aria-label={`Remove ${exp.label}`}>&times;</button>
+            </div>
+          ))}
+        </div>
+        <form onSubmit={handleAdd} className="add-expression-form">
+            <div className="emoji-input-wrapper" ref={pickerRef}>
+                <button type="button" onClick={() => setPickerOpen(!isPickerOpen)} className="emoji-input-btn">
+                    {newEmoji || '😀'}
+                </button>
+                {isPickerOpen && <EmojiPicker onSelect={handleEmojiSelect} />}
+            </div>
+          <input
+            type="text"
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="Label (e.g., Laughing)"
+            className="label-input"
+            required
+          />
+          <button type="submit" className="add-expression-btn">Add</button>
+        </form>
+      </div>
+    );
+  };
+
 
 const DownloadIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -325,10 +428,11 @@ const Footer = () => (
   );
 
 const App = () => {
+  const [expressions, setExpressions] = useState<Expression[]>(INITIAL_EXPRESSIONS);
   const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
   const [stickers, setStickers] = useState<Sticker[]>(
-    EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' }))
+    INITIAL_EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' as const }))
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -338,6 +442,28 @@ const App = () => {
   const [isCropModalOpen, setCropModalOpen] = useState(false);
   const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
 
+  useEffect(() => {
+    // Keep stickers in sync with the expressions list
+    setStickers(prevStickers => {
+      const newStickers = expressions.map(exp => {
+        const existingSticker = prevStickers.find(s => s.label === exp.label);
+        return existingSticker || { ...exp, imageUrl: null, status: 'idle' as const };
+      });
+      return newStickers.filter(s => expressions.some(e => e.label === s.label));
+    });
+  }, [expressions]);
+
+  const handleAddExpression = (newExpression: Expression) => {
+    if (!expressions.some(e => e.label.toLowerCase() === newExpression.label.toLowerCase())) {
+        setExpressions(prev => [...prev, newExpression]);
+    } else {
+        setError(`An expression with the label "${newExpression.label}" already exists.`);
+    }
+  };
+
+  const handleRemoveExpression = (labelToRemove: string) => {
+    setExpressions(prev => prev.filter(e => e.label !== labelToRemove));
+  };
 
   const handleFileSelect = (file: File | null | undefined) => {
     if (file && file.type.startsWith('image/')) {
@@ -359,7 +485,7 @@ const App = () => {
       mimeType: 'image/png', // Canvas output is always png
     });
     // Reset stickers when a new image is uploaded
-    setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' })));
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, status: 'idle' as const })));
     setError(null);
     setCropModalOpen(false);
   };
@@ -375,9 +501,13 @@ const App = () => {
         setError("Please upload an image first!");
         return;
     }
+    if (expressions.length === 0) {
+        setError("Please add at least one expression to generate stickers.");
+        return;
+    }
     setIsLoading(true);
     setError(null);
-    setStickers(EXPRESSIONS.map(e => ({ ...e, imageUrl: null, status: 'idle' }))); // Reset stickers
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, status: 'idle' as const }))); // Reset stickers
 
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
 
@@ -400,8 +530,8 @@ const App = () => {
     }
 
     try {
-      for (const expression of EXPRESSIONS) {
-        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' } : s));
+      for (const expression of expressions) {
+        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
 
         try {
             const prompt = `Generate a sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
@@ -424,18 +554,19 @@ const App = () => {
               const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
               setStickers(prevStickers =>
                 prevStickers.map(s =>
-                  s.label === expression.label ? { ...s, imageUrl, status: 'done' } : s
+                  s.label === expression.label ? { ...s, imageUrl, status: 'done' as const } : s
                 )
               );
             } else {
                 console.warn(`No image generated for: ${expression.label}`);
-                setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' } : s));
+                setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
             }
         } catch(err) {
             console.error(`Error generating sticker for ${expression.label}:`, err);
-            setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' } : s));
+            setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
         }
       }
+// Fix: Corrected a malformed try...catch block by adding curly braces.
     } catch (err) {
       console.error('Error during generation process:', err);
       setError('Sorry, a major error occurred while creating the stickers. Please try again.');
@@ -496,7 +627,13 @@ const App = () => {
           artisticStyle={artisticStyle}
           onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
         />
-        {error && <div className="error-message">{error}</div>}
+        <hr className="divider" />
+        <ExpressionManager 
+          expressions={expressions}
+          onAdd={handleAddExpression}
+          onRemove={handleRemoveExpression}
+        />
+        {error && <div className="error-message" onClick={() => setError(null)}>{error}</div>}
         <hr className="divider" />
         <StickerGrid stickers={stickers} originalFilename={originalFilename} />
         {hasGeneratedStickers && !isLoading && (
