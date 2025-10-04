@@ -16,6 +16,7 @@ This file tracks potential features and enhancements for the application.
 - [ ] **Error Handling Per Sticker:** If a single sticker fails to generate, show an error icon on that card instead of stopping the whole process, with an option to retry.
 - [x] Have a way to increase size of grid box so that the stickers can appear larger especially on large screens
 - [x] **Display Size Toggler:** Allow the user to control the sticker grid size (Small, Medium, Large).
+- [x] **Integrated Expression Management:** Remove the separate management card and allow users to add/delete expressions directly from the sticker grid.
 
 ### Advanced Features
 

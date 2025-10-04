@@ -141,8 +141,8 @@ const ImageCropper = ({
             </ReactCrop>
           </div>
           <div className="crop-modal-actions">
-            <button onClick={onCancel} className="crop-button secondary">Cancel</button>
-            <button onClick={handleCrop} className="crop-button primary">Crop & Use</button>
+            <button onClick={onCancel} className="modal-button secondary">Cancel</button>
+            <button onClick={handleCrop} className="modal-button primary">Crop & Use</button>
           </div>
         </div>
       </div>
@@ -290,81 +290,78 @@ const EmojiPicker = ({ onSelect }: { onSelect: (emoji: string) => void }) => {
         ))}
       </div>
     );
-  };
+};
 
-const ExpressionManager = ({
-    expressions,
-    onAdd,
-    onRemove,
-  }: {
-    expressions: Expression[];
-    onAdd: (expression: Expression) => void;
-    onRemove: (label: string) => void;
-  }) => {
-    const [newEmoji, setNewEmoji] = useState('');
+const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: Expression) => void; onClose: () => void }) => {
+    const [newEmoji, setNewEmoji] = useState('😀');
     const [newLabel, setNewLabel] = useState('');
     const [isPickerOpen, setPickerOpen] = useState(false);
     const pickerRef = useRef<HTMLDivElement>(null);
-  
+    const modalContentRef = useRef<HTMLDivElement>(null);
+
     const handleAdd = (e: React.FormEvent) => {
       e.preventDefault();
       if (newEmoji && newLabel) {
         onAdd({ emoji: newEmoji, label: newLabel });
-        setNewEmoji('');
-        setNewLabel('');
       }
     };
-
+  
     const handleEmojiSelect = (emoji: string) => {
-        setNewEmoji(emoji);
-        setPickerOpen(false);
+      setNewEmoji(emoji);
+      setPickerOpen(false);
     };
 
+    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (modalContentRef.current && !modalContentRef.current.contains(e.target as Node)) {
+          onClose();
+        }
+    };
+  
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-          if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
-            setPickerOpen(false);
-          }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-          document.removeEventListener('mousedown', handleClickOutside);
-        };
-      }, []);
+      const handleClickOutside = (event: MouseEvent) => {
+        if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+          setPickerOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, []);
   
     return (
-      <div className="expression-manager">
-        <h3>Manage Expressions</h3>
-        <div className="expression-list">
-          {expressions.map((exp) => (
-            <div key={exp.label} className="expression-tag">
-              <span>{exp.emoji} {exp.label}</span>
-              <button onClick={() => onRemove(exp.label)} className="remove-expression-btn" aria-label={`Remove ${exp.label}`}>&times;</button>
+      <div className="modal-backdrop" onClick={handleBackdropClick}>
+        <div className="modal-content" ref={modalContentRef}>
+          <h3>Add New Expression</h3>
+          <form onSubmit={handleAdd} className="add-expression-modal-form">
+            <div className="form-row">
+                <div className="emoji-input-wrapper" ref={pickerRef}>
+                    <button type="button" onClick={() => setPickerOpen(!isPickerOpen)} className="emoji-input-btn">
+                        {newEmoji}
+                    </button>
+                    {isPickerOpen && <EmojiPicker onSelect={handleEmojiSelect} />}
+                </div>
+                <input
+                    type="text"
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                    placeholder="Label (e.g., Laughing)"
+                    className="label-input"
+                    required
+                    autoFocus
+                />
             </div>
-          ))}
+            <div className="modal-actions">
+              <button type="button" onClick={onClose} className="modal-button secondary">Cancel</button>
+              <button type="submit" className="modal-button primary">Add Expression</button>
+            </div>
+          </form>
         </div>
-        <form onSubmit={handleAdd} className="add-expression-form">
-            <div className="emoji-input-wrapper" ref={pickerRef}>
-                <button type="button" onClick={() => setPickerOpen(!isPickerOpen)} className="emoji-input-btn">
-                    {newEmoji || '😀'}
-                </button>
-                {isPickerOpen && <EmojiPicker onSelect={handleEmojiSelect} />}
-            </div>
-          <input
-            type="text"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Label (e.g., Laughing)"
-            className="label-input"
-            required
-          />
-          <button type="submit" className="add-expression-btn">Add</button>
-        </form>
       </div>
     );
   };
 
-
+// --- Icon Components ---
 const DownloadIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
     <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
@@ -372,54 +369,84 @@ const DownloadIcon = () => (
   </svg>
 );
 
+const BinIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+    </svg>
+);
 
-const StickerItem = ({ sticker, originalFilename }: { sticker: Sticker, originalFilename: string | null }) => {
+const AddIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+    </svg>
+);
+
+
+const StickerItem = ({ sticker, originalFilename, onRemove }: { sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; }) => {
     const handleDownload = () => {
         if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
           const stickerName = sticker.label.replace(/\s+/g, '_');
           downloadImage(sticker.imageUrl, `${prefix}_${stickerName}.png`);
         }
-      };
+    };
     
-      const renderContent = () => {
+    const canInteract = sticker.status !== 'loading';
+
+    const renderContent = () => {
         switch (sticker.status) {
-          case 'loading':
+            case 'loading':
             return <div className="spinner"></div>;
-          case 'done':
+            case 'done':
             return <img src={sticker.imageUrl!} alt={sticker.label} className="sticker-image" />;
-          case 'error':
+            case 'error':
             return <span className="sticker-emoji" role="img" aria-label="Error">⚠️</span>;
-          case 'idle':
-          default:
+            case 'idle':
+            default:
             return <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>;
         }
-      };
+    };
 
-  return (
+    return (
     <div className="sticker-item">
-      <div className="sticker-placeholder">
-        {renderContent()}
-        <div className="sticker-label">
-            <span>{sticker.label}</span>
-            {sticker.imageUrl && sticker.status === 'done' && (
-              <button onClick={handleDownload} className="download-button" aria-label={`Download ${sticker.label} sticker`}>
-                <DownloadIcon />
-              </button>
-            )}
-          </div>
-      </div>
+        {canInteract && (
+            <button
+                className="delete-sticker-btn"
+                onClick={() => onRemove(sticker.label)}
+                aria-label={`Delete ${sticker.label} expression`}
+                title={`Delete ${sticker.label}`}
+            >
+                <BinIcon />
+                <span className="delete-tooltip">Delete</span>
+            </button>
+        )}
+        <div className="sticker-placeholder">
+            {renderContent()}
+            <div className="sticker-label">
+                <span>{sticker.label}</span>
+                {sticker.imageUrl && sticker.status === 'done' && (
+                <button onClick={handleDownload} className="download-button" aria-label={`Download ${sticker.label} sticker`}>
+                    <DownloadIcon />
+                </button>
+                )}
+            </div>
+        </div>
     </div>
-  );
+    );
 };
 
 type GridSize = 'small' | 'medium' | 'large';
 
-const StickerGrid = ({ stickers, originalFilename, gridSize }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; }) => (
+const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: () => void; onRemove: (label: string) => void; }) => (
   <section className={`sticker-grid size-${gridSize}`}>
     {stickers.map((sticker) => (
-      <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} />
+      <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} onRemove={onRemove} />
     ))}
+    <button className="add-sticker-btn" onClick={onAddClick} aria-label="Add new expression">
+        <AddIcon />
+        <span>Add Expression</span>
+    </button>
   </section>
 );
 
@@ -444,6 +471,7 @@ const App = () => {
   const [isCropModalOpen, setCropModalOpen] = useState(false);
   const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
   const [gridSize, setGridSize] = useState<GridSize>('medium');
+  const [isAddModalOpen, setAddModalOpen] = useState(false);
 
   useEffect(() => {
     // Keep stickers in sync with the expressions list
@@ -452,6 +480,7 @@ const App = () => {
         const existingSticker = prevStickers.find(s => s.label === exp.label);
         return existingSticker || { ...exp, imageUrl: null, status: 'idle' as const };
       });
+      // Filter out stickers whose expressions have been removed
       return newStickers.filter(s => expressions.some(e => e.label === s.label));
     });
   }, [expressions]);
@@ -459,9 +488,11 @@ const App = () => {
   const handleAddExpression = (newExpression: Expression) => {
     if (!expressions.some(e => e.label.toLowerCase() === newExpression.label.toLowerCase())) {
         setExpressions(prev => [...prev, newExpression]);
+        setError(null);
     } else {
         setError(`An expression with the label "${newExpression.label}" already exists.`);
     }
+    setAddModalOpen(false);
   };
 
   const handleRemoveExpression = (labelToRemove: string) => {
@@ -618,6 +649,12 @@ const App = () => {
             onCancel={handleCropCancel}
           />
         )}
+        {isAddModalOpen && (
+            <AddExpressionModal
+                onAdd={handleAddExpression}
+                onClose={() => setAddModalOpen(false)}
+            />
+        )}
         <StickerCreator
           characterImage={characterImage}
           onFileSelect={handleFileSelect}
@@ -630,55 +667,53 @@ const App = () => {
           artisticStyle={artisticStyle}
           onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
         />
-        <ExpressionManager
-          expressions={expressions}
-          onAdd={handleAddExpression}
-          onRemove={handleRemoveExpression}
-        />
         <div className="generation-results">
             {hasGenerationStarted && (
-                <>
-                    <h2>Your Sticker Pack</h2>
-                    <div className="results-header">
-                        <div className="results-header-info">
-                            <p>Here are your generated stickers. Download them individually or all at once!</p>
-                            <div className="display-size-toggler" role="group" aria-label="Sticker display size">
-                                <span>View size:</span>
-                                <button
-                                    className={`size-toggle-btn ${gridSize === 'small' ? 'active' : ''}`}
-                                    onClick={() => setGridSize('small')}
-                                    aria-pressed={gridSize === 'small'}
-                                    title="Small view"
-                                >
-                                    S
-                                </button>
-                                <button
-                                    className={`size-toggle-btn ${gridSize === 'medium' ? 'active' : ''}`}
-                                    onClick={() => setGridSize('medium')}
-                                    aria-pressed={gridSize === 'medium'}
-                                    title="Medium view"
-                                >
-                                    M
-                                </button>
-                                <button
-                                    className={`size-toggle-btn ${gridSize === 'large' ? 'active' : ''}`}
-                                    onClick={() => setGridSize('large')}
-                                    aria-pressed={gridSize === 'large'}
-                                    title="Large view"
-                                >
-                                    L
-                                </button>
-                            </div>
+                <div className="results-header">
+                    <div className="results-header-info">
+                        <p>Here are your generated stickers. Add more, or download them individually or all at once!</p>
+                        <div className="display-size-toggler" role="group" aria-label="Sticker display size">
+                            <span>View size:</span>
+                            <button
+                                className={`size-toggle-btn ${gridSize === 'small' ? 'active' : ''}`}
+                                onClick={() => setGridSize('small')}
+                                aria-pressed={gridSize === 'small'}
+                                title="Small view"
+                            >
+                                S
+                            </button>
+                            <button
+                                className={`size-toggle-btn ${gridSize === 'medium' ? 'active' : ''}`}
+                                onClick={() => setGridSize('medium')}
+                                aria-pressed={gridSize === 'medium'}
+                                title="Medium view"
+                            >
+                                M
+                            </button>
+                            <button
+                                className={`size-toggle-btn ${gridSize === 'large' ? 'active' : ''}`}
+                                onClick={() => setGridSize('large')}
+                                aria-pressed={gridSize === 'large'}
+                                title="Large view"
+                            >
+                                L
+                            </button>
                         </div>
-                        <button onClick={handleDownloadAll} className="download-all-button" disabled={!hasGeneratedStickers}>
-                            <DownloadIcon />
-                            Download All (.zip)
-                        </button>
                     </div>
-                </>
+                    <button onClick={handleDownloadAll} className="download-all-button" disabled={!hasGeneratedStickers}>
+                        <DownloadIcon />
+                        Download All (.zip)
+                    </button>
+                </div>
             )}
             {error && <p className="error-message" onClick={() => setError(null)}>{error}</p>}
-            <StickerGrid stickers={stickers} originalFilename={originalFilename} gridSize={gridSize} />
+            <StickerGrid 
+                stickers={stickers} 
+                originalFilename={originalFilename} 
+                gridSize={gridSize} 
+                onAddClick={() => setAddModalOpen(true)}
+                onRemove={handleRemoveExpression}
+            />
         </div>
       </main>
       <Footer />

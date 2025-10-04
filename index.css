@@ -39,8 +39,8 @@ main {
   cursor: pointer;
 }
 
-/* Image Cropper Modal */
-.crop-modal {
+/* --- Modals (Crop & Add Expression) --- */
+.modal-backdrop, .crop-modal {
     position: fixed;
     top: 0;
     left: 0;
@@ -53,47 +53,27 @@ main {
     z-index: 1000;
 }
 
-.crop-modal-content {
+.modal-content, .crop-modal-content {
     background-color: white;
     padding: 2rem;
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     width: 90%;
     max-width: 500px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    max-height: 90vh; /* Prevent overflow on tall screens */
 }
 
-.crop-modal-content h3 {
+.modal-content h3, .crop-modal-content h3 {
     margin-top: 0;
-    flex-shrink: 0; /* Prevent header from shrinking */
-}
-.crop-modal-content p {
-    flex-shrink: 0;
 }
 
-.crop-container {
-    margin: 1rem 0;
-    flex-grow: 1; /* Allow container to fill space */
-    position: relative; /* Needed for ReactCrop layout */
-    overflow: auto; /* Allow scrolling for tall images */
-}
-
-.ReactCrop__image {
-    max-height: none; /* Override default max-height to allow scrolling */
-}
-
-.crop-modal-actions {
+.modal-actions, .crop-modal-actions {
     margin-top: 1.5rem;
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
-    flex-shrink: 0; /* Prevent actions from shrinking */
 }
 
-.crop-button {
+.modal-button {
     border: none;
     padding: 0.6rem 1.2rem;
     border-radius: 4px;
@@ -103,20 +83,58 @@ main {
     transition: background-color 0.2s, box-shadow 0.2s;
 }
 
-.crop-button.primary {
+.modal-button.primary {
     background-color: #4a90e2;
     color: white;
 }
-.crop-button.primary:hover {
+.modal-button.primary:hover {
     background-color: #357abd;
 }
 
-.crop-button.secondary {
+.modal-button.secondary {
     background-color: #e0e0e0;
     color: #333;
 }
-.crop-button.secondary:hover {
+.modal-button.secondary:hover {
     background-color: #bdbdbd;
+}
+
+/* Specific Crop Modal Styles */
+.crop-modal-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh; /* Prevent overflow on tall screens */
+}
+.crop-modal-content p { flex-shrink: 0; }
+.crop-container {
+    margin: 1rem 0;
+    flex-grow: 1; /* Allow container to fill space */
+    position: relative; /* Needed for ReactCrop layout */
+    overflow: auto; /* Allow scrolling for tall images */
+}
+.ReactCrop__image { max-height: none; }
+
+
+/* Add Expression Modal Styles */
+.add-expression-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.add-expression-modal-form .form-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.add-expression-modal-form .label-input {
+    flex-grow: 1;
+    padding: 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9rem;
 }
 
 
@@ -130,6 +148,7 @@ main {
   gap: 2rem;
   align-items: center;
   flex-wrap: wrap;
+  margin-bottom: 2.5rem;
 }
 
 .character-display {
@@ -177,6 +196,7 @@ main {
   padding: 0 1rem;
 }
 
+.character-display:hover .character-placeholder,
 .character-display.drag-over .character-placeholder {
     border-color: #4a90e2;
     background-color: #e9f2fd;
@@ -321,75 +341,7 @@ main {
   border-top: 1px solid #e0e0e0;
   margin: 2.5rem 0;
 }
-
-/* Expression Manager */
-.expression-manager {
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin: 2.5rem 0 0 0;
-}
   
-.expression-manager h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    color: #333;
-}
-  
-.expression-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-}
-  
-.expression-tag {
-    background-color: #e0e0e0;
-    color: #333;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-  
-.remove-expression-btn {
-    background: #bdbdbd;
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    padding-bottom: 2px; /* Optical alignment */
-    transition: background-color 0.2s;
-}
-  
-.remove-expression-btn:hover {
-    background-color: #c62828;
-}
-  
-.add-expression-form {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-  
-.add-expression-form input {
-    padding: 0.6rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 0.9rem;
-}
-
 .emoji-input-wrapper {
     position: relative;
 }
@@ -398,31 +350,13 @@ main {
     padding: 0.6rem;
     border: 1px solid #ccc;
     border-radius: 4px;
-    font-size: 0.9rem;
+    font-size: 1.2rem;
     background: white;
     cursor: pointer;
     width: 60px;
+    height: 100%;
+    box-sizing: border-box;
     text-align: center;
-}
-  
-.add-expression-form .label-input {
-    flex-basis: 200px;
-    flex-grow: 1;
-}
-  
-.add-expression-btn {
-    background-color: #4a90e2;
-    color: white;
-    border: none;
-    padding: 0.6rem 1.2rem;
-    border-radius: 4px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-  
-.add-expression-btn:hover {
-    background-color: #357abd;
 }
 
 /* Emoji Picker */
@@ -496,6 +430,7 @@ main {
   padding: 1rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  position: relative;
 }
 
 .sticker-item:hover {
@@ -578,6 +513,89 @@ main {
 .download-button svg {
   width: 16px;
   height: 16px;
+}
+
+/* Sticker Grid Action Buttons (Add/Delete) */
+.add-sticker-btn {
+    aspect-ratio: 1/1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #f8f9fa;
+    border: 2px dashed #e0e0e0;
+    color: #bdbdbd;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.add-sticker-btn:hover {
+    border-color: #4a90e2;
+    background-color: #e9f2fd;
+    color: #4a90e2;
+}
+
+.add-sticker-btn svg {
+    width: 48px;
+    height: 48px;
+}
+
+.delete-sticker-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translate(40%, -40%);
+    z-index: 10;
+    background: #e0e0e0;
+    color: #333;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+.sticker-item:hover .delete-sticker-btn {
+    opacity: 1;
+    transform: translate(25%, -25%);
+}
+
+.delete-sticker-btn:hover {
+    background: #c62828;
+    color: white;
+}
+
+.delete-sticker-btn .delete-tooltip {
+    visibility: hidden;
+    width: 80px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: 120%; 
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.delete-sticker-btn:hover .delete-tooltip {
+    visibility: visible;
+    opacity: 1;
 }
 
 /* Generation Results Section */
