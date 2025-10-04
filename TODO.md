@@ -14,6 +14,8 @@ This file tracks potential features and enhancements for the application.
 - [ ] **Save Sessions:** Use the browser's local storage to save the user's last generated sticker pack. If they close the tab and come back, their work won't be lost.
 - [ ] **"Regenerate" Button:** Add a small "redo" button on each generated sticker. If a user isn't happy with one specific result, they can regenerate it without having to start the entire batch over.
 - [ ] **Error Handling Per Sticker:** If a single sticker fails to generate, show an error icon on that card instead of stopping the whole process, with an option to retry.
+- [x] Have a way to increase size of grid box so that the stickers can appear larger especially on large screens
+- [x] **Display Size Toggler:** Allow the user to control the sticker grid size (Small, Medium, Large).
 
 ### Advanced Features
 

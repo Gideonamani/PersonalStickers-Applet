@@ -413,8 +413,10 @@ const StickerItem = ({ sticker, originalFilename }: { sticker: Sticker, original
   );
 };
 
-const StickerGrid = ({ stickers, originalFilename }: { stickers: Sticker[]; originalFilename: string | null; }) => (
-  <section className="sticker-grid">
+type GridSize = 'small' | 'medium' | 'large';
+
+const StickerGrid = ({ stickers, originalFilename, gridSize }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; }) => (
+  <section className={`sticker-grid size-${gridSize}`}>
     {stickers.map((sticker) => (
       <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} />
     ))}
@@ -441,6 +443,7 @@ const App = () => {
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isCropModalOpen, setCropModalOpen] = useState(false);
   const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
+  const [gridSize, setGridSize] = useState<GridSize>('medium');
 
   useEffect(() => {
     // Keep stickers in sync with the expressions list
@@ -637,7 +640,36 @@ const App = () => {
                 <>
                     <h2>Your Sticker Pack</h2>
                     <div className="results-header">
-                        <p>Here are your generated stickers. Download them individually or all at once!</p>
+                        <div className="results-header-info">
+                            <p>Here are your generated stickers. Download them individually or all at once!</p>
+                            <div className="display-size-toggler" role="group" aria-label="Sticker display size">
+                                <span>View size:</span>
+                                <button
+                                    className={`size-toggle-btn ${gridSize === 'small' ? 'active' : ''}`}
+                                    onClick={() => setGridSize('small')}
+                                    aria-pressed={gridSize === 'small'}
+                                    title="Small view"
+                                >
+                                    S
+                                </button>
+                                <button
+                                    className={`size-toggle-btn ${gridSize === 'medium' ? 'active' : ''}`}
+                                    onClick={() => setGridSize('medium')}
+                                    aria-pressed={gridSize === 'medium'}
+                                    title="Medium view"
+                                >
+                                    M
+                                </button>
+                                <button
+                                    className={`size-toggle-btn ${gridSize === 'large' ? 'active' : ''}`}
+                                    onClick={() => setGridSize('large')}
+                                    aria-pressed={gridSize === 'large'}
+                                    title="Large view"
+                                >
+                                    L
+                                </button>
+                            </div>
+                        </div>
                         <button onClick={handleDownloadAll} className="download-all-button" disabled={!hasGeneratedStickers}>
                             <DownloadIcon />
                             Download All (.zip)
@@ -646,7 +678,7 @@ const App = () => {
                 </>
             )}
             {error && <p className="error-message" onClick={() => setError(null)}>{error}</p>}
-            <StickerGrid stickers={stickers} originalFilename={originalFilename} />
+            <StickerGrid stickers={stickers} originalFilename={originalFilename} gridSize={gridSize} />
         </div>
       </main>
       <Footer />

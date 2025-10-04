@@ -459,9 +459,19 @@ main {
 
 .sticker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 1.5rem;
   position: relative;
+  transition: grid-template-columns 0.3s ease-in-out;
+}
+
+.sticker-grid.size-small {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.sticker-grid.size-medium {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.sticker-grid.size-large {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
 }
 
 /* Individual Spinner in Sticker Item */
@@ -511,9 +521,20 @@ main {
 }
 
 .sticker-emoji {
-  font-size: 4rem;
   line-height: 1;
+  transition: font-size 0.3s ease-in-out;
 }
+
+.sticker-grid.size-small .sticker-emoji {
+    font-size: 4rem;
+}
+.sticker-grid.size-medium .sticker-emoji {
+    font-size: 5rem;
+}
+.sticker-grid.size-large .sticker-emoji {
+    font-size: 6rem;
+}
+
 
 .sticker-label {
   position: absolute;
@@ -580,11 +601,50 @@ main {
     background-color: #f8f9fa;
     border-radius: 8px;
 }
+
+.results-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex-grow: 1;
+}
   
 .results-header p {
     margin: 0;
     color: #555;
-    flex-grow: 1;
+}
+
+.display-size-toggler {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #555;
+    font-size: 0.9rem;
+}
+
+.size-toggle-btn {
+    background-color: #e0e0e0;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.size-toggle-btn:hover {
+    background-color: #d5d5d5;
+}
+
+.size-toggle-btn.active {
+    background-color: #4a90e2;
+    color: white;
+    border-color: #4a90e2;
 }
   
 .download-all-button {
@@ -621,4 +681,13 @@ main {
   margin-top: 2rem;
   color: #888;
   font-size: 0.9rem;
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+    .results-header-info {
+        flex-direction: row;
+        align-items: center;
+        gap: 1.5rem;
+    }
 }
