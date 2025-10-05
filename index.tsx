@@ -61,6 +61,61 @@ const downloadImage = (imageUrl: string, filename: string) => {
   document.body.removeChild(link);
 };
 
+/**
+ * Processes an image data URL to make light/white backgrounds transparent.
+ * This is used to clean up AI-generated images that may have a checkerboard
+ * pattern instead of a true alpha channel.
+ * @param imageUrl The base64 data URL of the image to process.
+ * @returns A promise that resolves with the new data URL of the processed image.
+ */
+const makeBackgroundTransparent = (imageUrl: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return reject(new Error('Could not get 2D context from canvas.'));
+        }
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+  
+        try {
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imgData.data;
+  
+          // Threshold for what's considered "white" or "light gray".
+          // Pixels with R, G, and B all above this value will be made transparent.
+          const threshold = 200; 
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+  
+            if (r > threshold && g > threshold && b > threshold) {
+              data[i + 3] = 0; // Set alpha to 0 (fully transparent)
+            }
+          }
+  
+          ctx.putImageData(imgData, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } catch (error) {
+          console.error('Error processing image data for transparency:', error);
+          // This can happen due to canvas tainting if crossOrigin fails.
+          // In this case, we'll fall back to the original image.
+          resolve(imageUrl); 
+        }
+      };
+      img.onerror = (error) => {
+        console.error('Failed to load image for transparency processing:', error);
+        reject(new Error('Image failed to load.'));
+      };
+      img.src = imageUrl;
+    });
+};
+
 // --- React Components ---
 
 const Header = () => (
@@ -383,7 +438,8 @@ const AddIcon = () => (
 );
 
 
-const StickerItem = ({ sticker, originalFilename, onRemove }: { sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; }) => {
+// Fix: Correctly type StickerItem as a React.FC to resolve JSX namespace and key prop errors.
+const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; }> = ({ sticker, originalFilename, onRemove }) => {
     const handleDownload = () => {
         if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
@@ -546,8 +602,8 @@ const App = () => {
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
 
     const backgroundInstruction = transparentBackground
-      ? 'a clean, transparent background'
-      : `a solid background of the hex color ${backgroundColor}`;
+      ? 'a transparent background. The output image must be a PNG with a true alpha channel, not a rendered checkerboard pattern representing transparency.'
+      : `a solid, opaque background of the hex color ${backgroundColor}`;
 
     let styleInstruction = '';
     switch (artisticStyle) {
@@ -568,7 +624,7 @@ const App = () => {
         setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
 
         try {
-            const prompt = `Generate a sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+            const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
             
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash-image',
@@ -585,7 +641,17 @@ const App = () => {
             
             const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (imagePart?.inlineData) {
-              const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+              let imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+              
+              // If transparency is requested, run the post-processing step
+              if (transparentBackground) {
+                try {
+                  imageUrl = await makeBackgroundTransparent(imageUrl);
+                } catch (processError) {
+                  console.warn(`Could not process image for transparency, falling back to original.`, processError);
+                }
+              }
+
               setStickers(prevStickers =>
                 prevStickers.map(s =>
                   s.label === expression.label ? { ...s, imageUrl, status: 'done' as const } : s
