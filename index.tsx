@@ -454,6 +454,9 @@ const StickerCreator = ({
                 type="file"
                 accept="image/*"
                 onChange={(e) => onFileSelect(e.target.files?.[0])}
+                onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+                  e.currentTarget.value = '';
+                }}
                 style={{ display: 'none' }}
                 ref={fileInputRef}
                 id="imageUpload"
