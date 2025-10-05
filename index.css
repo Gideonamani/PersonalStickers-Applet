@@ -670,6 +670,11 @@ main {
     transition: all 0.2s;
 }
 
+.sticker-action-btn.regenerate-btn:hover {
+    background: #ff9800;
+    color: white;
+}
+
 .sticker-action-btn.edit-btn:hover {
     background: #4a90e2;
     color: white;

@@ -658,6 +658,13 @@ const EditIcon = () => (
     </svg>
 );
 
+const RegenerateIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+    </svg>
+);
+
 const AddIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 16 16">
         <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
@@ -665,7 +672,7 @@ const AddIcon = () => (
 );
 
 
-const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; }> = ({ sticker, originalFilename, onRemove, onEdit }) => {
+const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
     const handleDownload = () => {
         if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
@@ -694,6 +701,16 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
     <div className="sticker-item">
         {canInteract && (
             <div className="sticker-item-actions">
+                {(sticker.status === 'done' || sticker.status === 'error') && (
+                    <button
+                        className="sticker-action-btn regenerate-btn"
+                        onClick={() => onRegenerate(sticker.label)}
+                        aria-label={`Regenerate ${sticker.label} sticker`}
+                        title="Regenerate"
+                    >
+                        <RegenerateIcon />
+                    </button>
+                )}
                 {sticker.status === 'done' && sticker.originalImageUrl && (
                      <button
                         className="sticker-action-btn edit-btn"
@@ -731,10 +748,10 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
 
 type GridSize = 'small' | 'medium' | 'large';
 
-const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: () => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; }) => (
+const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: () => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => (
   <section className={`sticker-grid size-${gridSize}`}>
     {stickers.map((sticker) => (
-      <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} onRemove={onRemove} onEdit={onEdit} />
+      <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} onRemove={onRemove} onEdit={onEdit} onRegenerate={onRegenerate} />
     ))}
     <button className="add-sticker-btn" onClick={onAddClick} aria-label="Add new expression">
         <AddIcon />
@@ -917,6 +934,85 @@ const App = () => {
     }
   };
 
+  const handleRegenerate = async (label: string) => {
+    if (!userImage) {
+        setError("Please upload an image first to regenerate a sticker.");
+        return;
+    }
+
+    const expression = expressions.find(e => e.label === label);
+    if (!expression) {
+        console.error("Expression not found for regeneration:", label);
+        return;
+    }
+
+    setStickers(prev => prev.map(s => s.label === label ? { ...s, status: 'loading' as const } : s));
+    setError(null);
+
+    const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
+
+    const backgroundInstruction = transparentBackground
+      ? 'a transparent background. The output image must be a PNG with a true alpha channel, not a rendered checkerboard pattern representing transparency.'
+      : `a solid, opaque background of the hex color ${backgroundColor}`;
+
+    let styleInstruction = '';
+    switch (artisticStyle) {
+        case 'Anime':
+        styleInstruction = 'a vibrant Anime/Manga style';
+        break;
+        case '3D Render':
+        styleInstruction = 'a polished 3D render style, similar to modern animated films';
+        break;
+        case 'Photo-realistic':
+        default:
+        styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph';
+        break;
+    }
+
+    try {
+        const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+            parts: [
+                { inlineData: { data: sourceImage.data, mimeType: sourceImage.mimeType } },
+                { text: prompt },
+            ],
+            },
+            config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+            },
+        });
+        
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (imagePart?.inlineData) {
+            const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+            let processedImageUrl = originalImageUrl;
+            
+            if (transparentBackground) {
+            try {
+                processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
+            } catch (processError) {
+                console.warn(`Could not process image for transparency, falling back to original.`, processError);
+            }
+            }
+
+            setStickers(prevStickers =>
+            prevStickers.map(s =>
+                s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl, status: 'done' as const } : s
+            )
+            );
+        } else {
+            console.warn(`No image generated for: ${expression.label}`);
+            setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
+        }
+    } catch(err) {
+        console.error(`Error generating sticker for ${expression.label}:`, err);
+        setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
+    }
+  };
+
   const handleDownloadAll = () => {
     const zip = new JSZip();
     const generatedStickers = stickers.filter(s => s.imageUrl && s.status === 'done');
@@ -1030,6 +1126,7 @@ const App = () => {
                 onAddClick={() => setAddModalOpen(true)}
                 onRemove={handleRemoveExpression}
                 onEdit={setEditingSticker}
+                onRegenerate={handleRegenerate}
             />
         </div>
       </main>
