@@ -819,18 +819,18 @@ const App = () => {
     }
   }, []);
 
-  // Save state to localStorage whenever it changes
+  // Save state to localStorage whenever settings or expressions change
   useEffect(() => {
     if (!isInitialized) {
       return; // Don't save until initial state is loaded
     }
     try {
-      // Save session state to localStorage.
-      // Images (userImage and generated stickers) are not saved to localStorage to save space.
-      // The user will need to re-upload an image to generate stickers on a new session.
+      // Create a snapshot of the session data that we want to persist.
+      // Importantly, we do NOT save any image data (userImage, sticker images)
+      // to avoid exceeding localStorage limits and to ensure a fresh start on page load.
       const sessionData = {
         expressions,
-        originalFilename,
+        originalFilename, // We save the filename, not the image itself
         artisticStyle,
         backgroundColor,
         transparentBackground,
@@ -839,14 +839,10 @@ const App = () => {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessionData));
     } catch (e) {
       console.error("Failed to save state to localStorage. Your latest changes might not be saved.", e);
-      // Do not clear localStorage here. It's better to preserve the last known good state
-      // than to wipe the user's entire session because of one failed save.
     }
   }, [
     expressions,
-    userImage, // Not saved, but its changes often accompany changes we do want to save (e.g., originalFilename)
     originalFilename,
-    stickers, // Not saved, but sticker status changes indicate an active session we want to persist other parts of.
     artisticStyle,
     backgroundColor,
     transparentBackground,
