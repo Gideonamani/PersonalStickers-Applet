@@ -955,7 +955,7 @@ const App = () => {
         setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
 
         try {
-            const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+            const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
             
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash-image',
@@ -1041,7 +1041,7 @@ const App = () => {
     }
 
     try {
-        const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle white outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+        const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
