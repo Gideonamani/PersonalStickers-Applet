@@ -393,16 +393,19 @@ main {
   align-items: center;
 }
 
-.generate-button, .upload-button {
+.generate-button, .upload-button, .restore-defaults-button {
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 4px;
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, color 0.2s;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .generate-button {
@@ -427,6 +430,17 @@ main {
 
 .upload-button:hover {
   background-color: #bdbdbd;
+}
+
+.restore-defaults-button {
+    background-color: #e0e0e0;
+    color: #333;
+    padding: 0.75rem; /* Make it more square for the icon */
+}
+
+.restore-defaults-button:hover {
+    background-color: #c62828;
+    color: white;
 }
 
 .divider {
