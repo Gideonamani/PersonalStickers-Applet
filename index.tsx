@@ -802,7 +802,14 @@ const App = () => {
           setOriginalFilename(savedState.originalFilename);
         }
         if (savedState.stickers && Array.isArray(savedState.stickers)) {
-          setStickers(savedState.stickers);
+          // Rehydrate stickers. The saved version lacks `originalImageUrl` to save space.
+          // We'll use `imageUrl` as a fallback for `originalImageUrl` so the
+          // transparency editor can still function.
+          const rehydratedStickers = savedState.stickers.map((s: any) => ({
+            ...s,
+            originalImageUrl: s.imageUrl,
+          }));
+          setStickers(rehydratedStickers);
         }
         if (savedState.artisticStyle) {
           setArtisticStyle(savedState.artisticStyle);
@@ -831,11 +838,16 @@ const App = () => {
       return; // Don't save until initial state is loaded
     }
     try {
+      // Create a leaner version of the state to avoid exceeding localStorage quota.
+      // The main culprit is storing two base64 strings per sticker (imageUrl and originalImageUrl).
+      // We omit originalImageUrl during save and restore it with a fallback on load.
+      const leanStickers = stickers.map(({ originalImageUrl, ...rest }) => rest);
+
       const sessionData = {
         expressions,
         userImage,
         originalFilename,
-        stickers,
+        stickers: leanStickers,
         artisticStyle,
         backgroundColor,
         transparentBackground,
@@ -844,6 +856,10 @@ const App = () => {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessionData));
     } catch (e) {
       console.error("Failed to save state to localStorage", e);
+       // If saving fails (e.g., still too large), clear potentially corrupt stored data.
+       if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+      }
     }
   }, [
     expressions,
