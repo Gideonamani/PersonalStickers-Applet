@@ -783,6 +783,79 @@ const App = () => {
   const [gridSize, setGridSize] = useState<GridSize>('medium');
   const [isAddModalOpen, setAddModalOpen] = useState(false);
   const [editingSticker, setEditingSticker] = useState<Sticker | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const LOCAL_STORAGE_KEY = 'stickerMeSession';
+
+  // Load state from localStorage on initial mount
+  useEffect(() => {
+    try {
+      const savedStateJSON = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (savedStateJSON) {
+        const savedState = JSON.parse(savedStateJSON);
+        if (savedState.expressions && Array.isArray(savedState.expressions)) {
+          setExpressions(savedState.expressions);
+        }
+        if (savedState.userImage) {
+          setUserImage(savedState.userImage);
+        }
+        if (savedState.originalFilename) {
+          setOriginalFilename(savedState.originalFilename);
+        }
+        if (savedState.stickers && Array.isArray(savedState.stickers)) {
+          setStickers(savedState.stickers);
+        }
+        if (savedState.artisticStyle) {
+          setArtisticStyle(savedState.artisticStyle);
+        }
+        if (savedState.backgroundColor) {
+          setBackgroundColor(savedState.backgroundColor);
+        }
+        if (typeof savedState.transparentBackground === 'boolean') {
+          setTransparentBackground(savedState.transparentBackground);
+        }
+        if (savedState.gridSize) {
+          setGridSize(savedState.gridSize);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load state from localStorage", e);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    } finally {
+      setIsInitialized(true);
+    }
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    if (!isInitialized) {
+      return; // Don't save until initial state is loaded
+    }
+    try {
+      const sessionData = {
+        expressions,
+        userImage,
+        originalFilename,
+        stickers,
+        artisticStyle,
+        backgroundColor,
+        transparentBackground,
+        gridSize,
+      };
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessionData));
+    } catch (e) {
+      console.error("Failed to save state to localStorage", e);
+    }
+  }, [
+    expressions,
+    userImage,
+    originalFilename,
+    stickers,
+    artisticStyle,
+    backgroundColor,
+    transparentBackground,
+    gridSize,
+    isInitialized
+  ]);
 
   useEffect(() => {
     // Keep stickers in sync with the expressions list
