@@ -795,21 +795,8 @@ const App = () => {
         if (savedState.expressions && Array.isArray(savedState.expressions)) {
           setExpressions(savedState.expressions);
         }
-        if (savedState.userImage) {
-          setUserImage(savedState.userImage);
-        }
         if (savedState.originalFilename) {
           setOriginalFilename(savedState.originalFilename);
-        }
-        if (savedState.stickers && Array.isArray(savedState.stickers)) {
-          // Rehydrate stickers. The saved version lacks `originalImageUrl` to save space.
-          // We'll use `imageUrl` as a fallback for `originalImageUrl` so the
-          // transparency editor can still function.
-          const rehydratedStickers = savedState.stickers.map((s: any) => ({
-            ...s,
-            originalImageUrl: s.imageUrl,
-          }));
-          setStickers(rehydratedStickers);
         }
         if (savedState.artisticStyle) {
           setArtisticStyle(savedState.artisticStyle);
@@ -838,16 +825,12 @@ const App = () => {
       return; // Don't save until initial state is loaded
     }
     try {
-      // Create a leaner version of the state to avoid exceeding localStorage quota.
-      // The main culprit is storing two base64 strings per sticker (imageUrl and originalImageUrl).
-      // We omit originalImageUrl during save and restore it with a fallback on load.
-      const leanStickers = stickers.map(({ originalImageUrl, ...rest }) => rest);
-
+      // Save session state to localStorage.
+      // Images (userImage and generated stickers) are not saved to localStorage to save space.
+      // The user will need to re-upload an image to generate stickers on a new session.
       const sessionData = {
         expressions,
-        userImage,
         originalFilename,
-        stickers: leanStickers,
         artisticStyle,
         backgroundColor,
         transparentBackground,
@@ -855,17 +838,15 @@ const App = () => {
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessionData));
     } catch (e) {
-      console.error("Failed to save state to localStorage", e);
-       // If saving fails (e.g., still too large), clear potentially corrupt stored data.
-       if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-      }
+      console.error("Failed to save state to localStorage. Your latest changes might not be saved.", e);
+      // Do not clear localStorage here. It's better to preserve the last known good state
+      // than to wipe the user's entire session because of one failed save.
     }
   }, [
     expressions,
-    userImage,
+    userImage, // Not saved, but its changes often accompany changes we do want to save (e.g., originalFilename)
     originalFilename,
-    stickers,
+    stickers, // Not saved, but sticker status changes indicate an active session we want to persist other parts of.
     artisticStyle,
     backgroundColor,
     transparentBackground,
