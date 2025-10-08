@@ -81,17 +81,22 @@ const POPULAR_EMOJIS = [
 
 
 type StickerStatus = 'idle' | 'loading' | 'done' | 'error';
+type ExpressionType = 'plain' | 'expressive';
+
+type Expression = {
+    emoji: string;
+    label: string;
+    type: ExpressionType;
+};
 type Sticker = {
     emoji: string;
     label: string;
+    type: ExpressionType;
     imageUrl: string | null; // The final image to display/download
     originalImageUrl: string | null; // The raw image from the AI, for reprocessing
     status: StickerStatus;
 };
-type Expression = {
-    emoji: string;
-    label: string;
-};
+
 type TransparencyOptions = {
     colorTol: number;
     tileGuess: number;
@@ -522,7 +527,7 @@ const EmojiPicker = ({ onSelect }: { onSelect: (emoji: string) => void }) => {
     );
 };
 
-const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: Expression) => void; onClose: () => void }) => {
+const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: {emoji: string, label: string}) => void; onClose: () => void }) => {
     const { t } = useLanguage();
     const [newEmoji, setNewEmoji] = useState('😀');
     const [newLabel, setNewLabel] = useState('');
@@ -886,7 +891,7 @@ const UploadIcon = () => (
 
 const CameraSwitchIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512" fill="currentColor">
-        <path d="M307.81,212.18c-3.24,0-6.07-2.17-6.91-5.3l-4.82-17.88c-0.84-3.12-3.68-5.3-6.91-5.3h-21.46h-25.44H220.8     c-3.24,0-6.07,2.17-6.91,5.3l-4.82,17.88c-0.84-3.12-3.68-5.3-6.91-5.3H169.5c-3.96,0-7.16,3.21-7.16,7.16v101.78     c0,3.96,3.21,7.16,7.16,7.16h170.95c3.96,0,7.16,3.21,7.16-7.16V219.35c0-3.96-3.21-7.16-7.16-7.16H307.81z M282.33,264.94     c-0.86,13.64-11.93,24.71-25.58,25.58c-16.54,1.05-30.18-12.59-29.14-29.14c0.86-13.64,11.93-24.71,25.58-25.58     C269.74,234.76,283.38,248.4,282.33,264.94z"/>
+        <path d="M307.81,212.18c-3.24,0-6.07-2.17-6.91-5.3l-4.82-17.88c-0.84-3.12-3.68-5.3-6.91-5.3h-21.46h-25.44H220.8     c-3.24,0-6.07,2.17-6.91,5.3l-4.82,17.88c-0.84-3.12-3.68-5.3-6.91-5.3H169.5c-3.96,0-7.16,3.21-7.16,7.16v101.78     c0,3.96,3.21,7.16,7.16,7.16h170.95c3.96,0,7.16,3.21,7.16,7.16V219.35c0-3.96-3.21-7.16-7.16-7.16H307.81z M282.33,264.94     c-0.86,13.64-11.93,24.71-25.58,25.58c-16.54,1.05-30.18-12.59-29.14-29.14c0.86-13.64,11.93-24.71,25.58-25.58     C269.74,234.76,283.38,248.4,282.33,264.94z"/>
         <path d="M82.95,272.41c3.82,0,7.53-1.53,10.23-4.23l21.23-21.23c4.74-4.74,6.4-11.92,3.73-18.06     c-2.73-6.29-8.88-8.95-18.84-7.57l-0.27,0.27c15.78-71.56,79.7-125.27,155.94-125.27c60.72,0,115.41,33.72,142.73,87.99     c3.58,7.11,12.24,9.97,19.34,6.39c7.11-3.58,9.97-12.24,6.39-19.34c-15.47-30.73-39.05-56.66-68.22-75.01     C325.23,77.47,290.57,67.5,254.98,67.5c-93,0-170.48,67.71-185.75,156.41c-5.38-4.77-13.59-5.18-19.13-0.44     c-6.3,5.39-6.75,14.88-1.13,20.84c0.23,0.24,5.69,6.03,11.41,11.93c3.41,3.51,6.2,6.33,8.3,8.38c4.23,4.13,7.88,7.69,14.07,7.78     C82.81,272.41,82.88,272.41,82.95,272.41z"/>
         <path d="M464.28,247.82l-26.5-26.5c-2.75-2.75-6.57-4.3-10.44-4.23c-2.33,0.03-4.29,0.56-6.07,1.42     c-0.26,0.12-0.51,0.26-0.76,0.4c-0.04,0.02-0.08,0.04-0.12,0.06c-0.59,0.33-1.16,0.68-1.69,1.08c-1.88,1.34-3.6,3.03-5.44,4.82     c-2.1,2.05-4.89,4.87-8.3,8.38c-5.72,5.9-11.18,11.68-11.41,11.93c-5.46,5.79-5.19,14.91,0.6,20.36     c5.75,5.42,14.77,5.18,20.24-0.48c-4.72,83.85-74.42,150.62-159.43,150.62c-70.52,0-131.86-45.23-152.62-112.55     c-2.35-7.6-10.41-11.86-18.01-9.52c-7.6,2.34-11.86,10.41-9.52,18.01c11.62,37.68,35.48,71.52,67.19,95.28     c32.8,24.59,71.86,37.58,112.96,37.58c100.11,0,182.23-78.45,188.14-177.1l0.79,0.79c2.81,2.81,6.5,4.22,10.18,4.22     c3.69,0,7.37-1.41,10.18-4.22     C469.91,262.57,469.91,253.45,464.28,247.82z"/>
     </svg>
@@ -970,17 +975,38 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
 
 type GridSize = 'small' | 'medium' | 'large';
 
-const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: () => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => {
+const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: (type: ExpressionType) => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => {
     const { t } = useLanguage();
+    
+    const plainStickers = stickers.filter(s => s.type === 'plain');
+    const expressiveStickers = stickers.filter(s => s.type === 'expressive');
+
+    const renderGridSection = (title: string, stickerList: Sticker[], type: ExpressionType) => (
+        <div className="sticker-category">
+            <h3 className="sticker-category-header">{title}</h3>
+            <div className={`sticker-grid size-${gridSize}`}>
+                {stickerList.map(sticker => (
+                    <StickerItem 
+                        key={sticker.label}
+                        sticker={sticker} 
+                        originalFilename={originalFilename} 
+                        onRemove={onRemove} 
+                        onEdit={onEdit} 
+                        onRegenerate={onRegenerate} 
+                    />
+                ))}
+                <button className="add-sticker-btn" onClick={() => onAddClick(type)} aria-label={t('addExpressionButton')}>
+                    <AddIcon />
+                    <span>{t('addExpressionButton')}</span>
+                </button>
+            </div>
+        </div>
+    );
+
     return (
-        <section className={`sticker-grid size-${gridSize}`}>
-            {stickers.map((sticker) => (
-            <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} onRemove={onRemove} onEdit={onEdit} onRegenerate={onRegenerate} />
-            ))}
-            <button className="add-sticker-btn" onClick={onAddClick} aria-label={t('addExpressionButton')}>
-                <AddIcon />
-                <span>{t('addExpressionButton')}</span>
-            </button>
+        <section>
+            {renderGridSection(t('plainEmotionsHeader'), plainStickers, 'plain')}
+            {renderGridSection(t('expressivePhrasesHeader'), expressiveStickers, 'expressive')}
         </section>
     );
 };
@@ -1057,17 +1083,27 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getInitialExpressions = useCallback(() => [
-    { emoji: '👍', label: t('expThumbsUp') },
-    { emoji: '😏', label: t('expCheekySmile') },
-    { emoji: '😉', label: t('expNaughtyWink') },
-    { emoji: '😎', label: t('expCoolShades') },
-    { emoji: '👏', label: t('expSlowClap') },
-    { emoji: '😔', label: t('expSadSigh') },
-    { emoji: '🤦', label: t('expFacepalm') },
-    { emoji: '☹️', label: t('expFrown') },
-    { emoji: '😋', label: t('expTongueOut') },
-    { emoji: '🤔', label: t('expCuriousThinking') },
+  const getInitialExpressions = useCallback((): Expression[] => [
+    { emoji: '👍', label: t('expThumbsUp'), type: 'plain' },
+    { emoji: '😏', label: t('expCheekySmile'), type: 'plain' },
+    { emoji: '😉', label: t('expNaughtyWink'), type: 'plain' },
+    { emoji: '😎', label: t('expCoolShades'), type: 'plain' },
+    { emoji: '👏', label: t('expSlowClap'), type: 'plain' },
+    { emoji: '😔', label: t('expSadSigh'), type: 'plain' },
+    { emoji: '🤦', label: t('expFacepalm'), type: 'plain' },
+    { emoji: '☹️', label: t('expFrown'), type: 'plain' },
+    { emoji: '😋', label: t('expTongueOut'), type: 'plain' },
+    { emoji: '🤔', label: t('expCuriousThinking'), type: 'plain' },
+    { emoji: '👌', label: t('expPhrasePoapoa'), type: 'expressive' },
+    { emoji: '🧐', label: t('expPhraseNaijuaHiyo'), type: 'expressive' },
+    { emoji: '🙅', label: t('expPhraseAchaKabisa'), type: 'expressive' },
+    { emoji: '🙅‍♀️', label: t('expPhraseNoThanks'), type: 'expressive' },
+    { emoji: '🙏', label: t('expPhraseAhsanteSana'), type: 'expressive' },
+    { emoji: '⁉️', label: t('expPhraseAaah'), type: 'expressive' },
+    { emoji: '✅', label: t('expPhraseYeeap'), type: 'expressive' },
+    { emoji: '🤗', label: t('expPhraseUsiogope'), type: 'expressive' },
+    { emoji: '🤥', label: t('expPhraseUwongo'), type: 'expressive' },
+    { emoji: '🙄', label: t('expPhraseKausha'), type: 'expressive' },
   ], [t]);
 
   const [expressions, setExpressions] = useState<Expression[]>(() => getInitialExpressions());
@@ -1084,7 +1120,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [isSourceModalOpen, setSourceModalOpen] = useState(false);
   const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
   const [gridSize, setGridSize] = useState<GridSize>('medium');
-  const [isAddModalOpen, setAddModalOpen] = useState(false);
+  const [expressionTypeToAdd, setExpressionTypeToAdd] = useState<ExpressionType | null>(null);
   const [editingSticker, setEditingSticker] = useState<Sticker | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const LOCAL_STORAGE_KEY = 'stickerMeSession';
@@ -1162,14 +1198,15 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     });
   }, [expressions]);
 
-  const handleAddExpression = (newExpression: Expression) => {
+  const handleAddExpression = (newExpression: { emoji: string; label: string }, type: ExpressionType) => {
     if (!expressions.some(e => e.label.toLowerCase() === newExpression.label.toLowerCase())) {
-        setExpressions(prev => [...prev, newExpression]);
+        const expressionToAdd: Expression = { ...newExpression, type };
+        setExpressions(prev => [...prev, expressionToAdd]);
         setError(null);
     } else {
         setError(t('errorExpressionExists', { label: newExpression.label }));
     }
-    setAddModalOpen(false);
+    setExpressionTypeToAdd(null);
   };
 
   const handleRemoveExpression = (labelToRemove: string) => {
@@ -1219,85 +1256,74 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   };
 
 
-  const handleGenerate = async () => {
-    if (!userImage) {
-        setError(t('errorUploadFirst'));
-        return;
-    }
-    if (expressions.length === 0) {
-        setError(t('errorNeedExpression'));
-        return;
-    }
-    setIsLoading(true);
-    setError(null);
-    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+  const generateSticker = async (expression: Expression) => {
+    if (!userImage) return; // Should be checked before calling
 
+    setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
+    
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
-
+    
     const backgroundInstruction = transparentBackground
       ? 'a transparent background. The output image must be a PNG with a true alpha channel, not a rendered checkerboard pattern representing transparency.'
       : `a solid, opaque background of the hex color ${backgroundColor}`;
 
     let styleInstruction = '';
     switch (artisticStyle) {
-        case 'Anime':
-        styleInstruction = 'a vibrant Anime/Manga style';
-        break;
-        case '3D Render':
-        styleInstruction = 'a polished 3D render style, similar to modern animated films';
-        break;
-        case 'Photo-realistic':
-        default:
-        styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph';
-        break;
+        case 'Anime': styleInstruction = 'a vibrant Anime/Manga style'; break;
+        case '3D Render': styleInstruction = 'a polished 3D render style, similar to modern animated films'; break;
+        case 'Photo-realistic': default: styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph'; break;
+    }
+
+    let specificInstruction = '';
+    if (expression.type === 'plain') {
+        specificInstruction = 'Create a clean, simple, close-up sticker focusing on the facial expression of the character. The character should be shown from the chest up.';
+    } else { // expressive
+        specificInstruction = 'Create a high-energy, meme-style sticker. The character can have exaggerated features or be in a more dynamic pose to match the phrase. Feel free to add subtle, non-distracting graphic elements like motion lines or sparkles if it enhances the expression.';
     }
 
     try {
-      for (const expression of expressions) {
-        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
-
-        try {
-            const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+        const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ inlineData: sourceImage }, { text: prompt }] },
+            config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
+        });
+        
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (imagePart?.inlineData) {
+            const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+            let processedImageUrl = originalImageUrl;
             
-            const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash-image',
-              contents: {
-                parts: [
-                  { inlineData: { data: sourceImage.data, mimeType: sourceImage.mimeType } },
-                  { text: prompt },
-                ],
-              },
-              config: {
-                responseModalities: [Modality.IMAGE, Modality.TEXT],
-              },
-            });
-            
-            const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (imagePart?.inlineData) {
-              const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-              let processedImageUrl = originalImageUrl;
-              
-              if (transparentBackground) {
+            if (transparentBackground) {
                 try {
-                  processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
+                    processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
                 } catch (processError) {
-                  console.warn(`Could not process image for transparency, falling back to original.`, processError);
+                    console.warn(`Could not process image for transparency, falling back to original.`, processError);
                 }
-              }
-
-              setStickers(prevStickers =>
-                prevStickers.map(s =>
-                  s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl, status: 'done' as const } : s
-                )
-              );
-            } else {
-                console.warn(`No image generated for: ${expression.label}`);
-                setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
             }
-        } catch(err) {
-            console.error(`Error generating sticker for ${expression.label}:`, err);
-            setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl, status: 'done' as const } : s));
+        } else {
+            console.warn(`No image generated for: ${expression.label}`);
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
         }
+    } catch(err) {
+        console.error(`Error generating sticker for ${expression.label}:`, err);
+        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!userImage) { setError(t('errorUploadFirst')); return; }
+    if (expressions.length === 0) { setError(t('errorNeedExpression')); return; }
+    
+    setIsLoading(true);
+    setError(null);
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+
+    try {
+      for (const expression of expressions) {
+        await generateSticker(expression);
       }
     } catch (err) {
       console.error('Error during generation process:', err);
@@ -1308,82 +1334,13 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   };
 
   const handleRegenerate = async (label: string) => {
-    if (!userImage) {
-        setError(t('errorUploadFirst'));
-        return;
-    }
+    if (!userImage) { setError(t('errorUploadFirst')); return; }
 
     const expression = expressions.find(e => e.label === label);
-    if (!expression) {
-        console.error("Expression not found for regeneration:", label);
-        return;
-    }
+    if (!expression) { console.error("Expression not found for regeneration:", label); return; }
 
-    setStickers(prev => prev.map(s => s.label === label ? { ...s, status: 'loading' as const } : s));
     setError(null);
-
-    const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
-
-    const backgroundInstruction = transparentBackground
-      ? 'a transparent background. The output image must be a PNG with a true alpha channel, not a rendered checkerboard pattern representing transparency.'
-      : `a solid, opaque background of the hex color ${backgroundColor}`;
-
-    let styleInstruction = '';
-    switch (artisticStyle) {
-        case 'Anime':
-        styleInstruction = 'a vibrant Anime/Manga style';
-        break;
-        case '3D Render':
-        styleInstruction = 'a polished 3D render style, similar to modern animated films';
-        break;
-        case 'Photo-realistic':
-        default:
-        styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph';
-        break;
-    }
-
-    try {
-        const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: {
-            parts: [
-                { inlineData: { data: sourceImage.data, mimeType: userImage.mimeType } },
-                { text: prompt },
-            ],
-            },
-            config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
-            },
-        });
-        
-        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (imagePart?.inlineData) {
-            const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-            let processedImageUrl = originalImageUrl;
-            
-            if (transparentBackground) {
-            try {
-                processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
-            } catch (processError) {
-                console.warn(`Could not process image for transparency, falling back to original.`, processError);
-            }
-            }
-
-            setStickers(prevStickers =>
-            prevStickers.map(s =>
-                s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl, status: 'done' as const } : s
-            )
-            );
-        } else {
-            console.warn(`No image generated for: ${expression.label}`);
-            setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
-        }
-    } catch(err) {
-        console.error(`Error generating sticker for ${expression.label}:`, err);
-        setStickers(prevStickers => prevStickers.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
-    }
+    await generateSticker(expression);
   };
 
   const handleDownloadAll = () => {
@@ -1430,7 +1387,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       setCropModalOpen(false);
       setArtisticStyle('Photo-realistic');
       setGridSize('medium');
-      setAddModalOpen(false);
+      setExpressionTypeToAdd(null);
       setEditingSticker(null);
     }
   };
@@ -1479,10 +1436,10 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                 onClose={() => setSourceModalOpen(false)}
             />
         )}
-        {isAddModalOpen && (
+        {expressionTypeToAdd && (
             <AddExpressionModal
-                onAdd={handleAddExpression}
-                onClose={() => setAddModalOpen(false)}
+                onAdd={(exp) => handleAddExpression(exp, expressionTypeToAdd)}
+                onClose={() => setExpressionTypeToAdd(null)}
             />
         )}
         {editingSticker && (
@@ -1549,7 +1506,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                 stickers={stickers} 
                 originalFilename={originalFilename} 
                 gridSize={gridSize} 
-                onAddClick={() => setAddModalOpen(true)}
+                onAddClick={setExpressionTypeToAdd}
                 onRemove={handleRemoveExpression}
                 onEdit={setEditingSticker}
                 onRegenerate={handleRegenerate}
