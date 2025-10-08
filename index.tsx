@@ -913,14 +913,22 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
     const renderContent = () => {
         switch (sticker.status) {
             case 'loading':
-            return <div className="spinner"></div>;
+                return <div className="spinner"></div>;
             case 'done':
-            return <img src={sticker.imageUrl!} alt={sticker.label} className="sticker-image" />;
+                return <img src={sticker.imageUrl!} alt={sticker.label} className="sticker-image" />;
             case 'error':
-            return <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>;
+                return <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>;
             case 'idle':
             default:
-            return <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>;
+                if (sticker.type === 'expressive') {
+                    return (
+                        <>
+                            <span className="sticker-emoji-bg" aria-hidden="true">{sticker.emoji}</span>
+                            <span className="sticker-text-fg">{sticker.label}</span>
+                        </>
+                    );
+                }
+                return <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>;
         }
     };
 
@@ -1134,6 +1142,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         if (savedState.expressions && Array.isArray(savedState.expressions)) {
           setExpressions(savedState.expressions);
         } else {
+          // If storage is there but expressions are missing/invalid, load defaults.
           setExpressions(getInitialExpressions());
         }
         if (savedState.originalFilename) {
@@ -1151,10 +1160,15 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         if (savedState.gridSize) {
           setGridSize(savedState.gridSize);
         }
+      } else {
+        // If no saved state in localStorage, load the defaults.
+        setExpressions(getInitialExpressions());
       }
     } catch (e) {
       console.error("Failed to load state from localStorage", e);
       localStorage.removeItem(LOCAL_STORAGE_KEY);
+      // On any parsing error, fallback to defaults to prevent a broken state.
+      setExpressions(getInitialExpressions());
     } finally {
       setIsInitialized(true);
     }
@@ -1418,147 +1432,3 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           />
         )}
         {isCameraModalOpen && (
-            <CameraModal
-                onPictureTaken={handlePictureTaken}
-                onClose={() => setCameraModalOpen(false)}
-            />
-        )}
-        {isSourceModalOpen && (
-            <ImageSourceModal 
-                onSelectFile={() => {
-                    fileInputRef.current?.click();
-                    setSourceModalOpen(false);
-                }}
-                onSelectCamera={() => {
-                    setCameraModalOpen(true);
-                    setSourceModalOpen(false);
-                }}
-                onClose={() => setSourceModalOpen(false)}
-            />
-        )}
-        {expressionTypeToAdd && (
-            <AddExpressionModal
-                onAdd={(exp) => handleAddExpression(exp, expressionTypeToAdd)}
-                onClose={() => setExpressionTypeToAdd(null)}
-            />
-        )}
-        {editingSticker && (
-            <TransparencyEditorModal
-                sticker={editingSticker}
-                onSave={handleSaveTransparency}
-                onClose={() => setEditingSticker(null)}
-            />
-        )}
-        <StickerCreator
-          characterImage={characterImage}
-          onRequestImage={() => setSourceModalOpen(true)}
-          onGenerate={handleGenerate}
-          isLoading={isLoading}
-          backgroundColor={backgroundColor}
-          onBackgroundColorChange={(e) => setBackgroundColor(e.target.value)}
-          transparentBackground={transparentBackground}
-          onTransparentChange={(e) => setTransparentBackground(e.target.checked)}
-          artisticStyle={artisticStyle}
-          onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
-          onRestoreDefaults={handleRestoreDefaults}
-        />
-        <div className="generation-results">
-            {hasGenerationStarted && (
-                <div className="results-header">
-                    <div className="results-header-info">
-                        <p>{t('resultsInfo')}</p>
-                        <div className="display-size-toggler" role="group" aria-label="Sticker display size">
-                            <span>{t('viewSizeLabel')}</span>
-                            <button
-                                className={`size-toggle-btn ${gridSize === 'small' ? 'active' : ''}`}
-                                onClick={() => setGridSize('small')}
-                                aria-pressed={gridSize === 'small'}
-                                title={t('viewSizeSmall')}
-                            >
-                                S
-                            </button>
-                            <button
-                                className={`size-toggle-btn ${gridSize === 'medium' ? 'active' : ''}`}
-                                onClick={() => setGridSize('medium')}
-                                aria-pressed={gridSize === 'medium'}
-                                title={t('viewSizeMedium')}
-                            >
-                                M
-                            </button>
-                            <button
-                                className={`size-toggle-btn ${gridSize === 'large' ? 'active' : ''}`}
-                                onClick={() => setGridSize('large')}
-                                aria-pressed={gridSize === 'large'}
-                                title={t('viewSizeLarge')}
-                            >
-                                L
-                            </button>
-                        </div>
-                    </div>
-                    <button onClick={handleDownloadAll} className="download-all-button" disabled={!hasGeneratedStickers}>
-                        <DownloadIcon />
-                        {t('downloadAllButton')}
-                    </button>
-                </div>
-            )}
-            {error && <p className="error-message" onClick={() => setError(null)}>{error}</p>}
-            <StickerGrid 
-                stickers={stickers} 
-                originalFilename={originalFilename} 
-                gridSize={gridSize} 
-                onAddClick={setExpressionTypeToAdd}
-                onRemove={handleRemoveExpression}
-                onEdit={setEditingSticker}
-                onRegenerate={handleRegenerate}
-            />
-        </div>
-      </main>
-      <Footer />
-    </>
-  );
-};
-
-const DocumentTitleUpdater = () => {
-    const { t } = useLanguage();
-    useEffect(() => {
-        document.title = t('appName');
-    }, [t]);
-    return null; // This component does not render anything
-};
-
-const App = () => {
-    const [hash, setHash] = useState(window.location.hash);
-  
-    useEffect(() => {
-      const handleHashChange = () => {
-        setHash(window.location.hash);
-      };
-      window.addEventListener('hashchange', handleHashChange);
-      return () => {
-        window.removeEventListener('hashchange', handleHashChange);
-      };
-    }, []);
-  
-    const navigateToApp = () => {
-      window.location.hash = '#app';
-    };
-    
-    const navigateToHome = () => {
-      window.location.hash = '';
-    };
-    
-    const page = hash === '#app' 
-        ? <StickerAppPage onNavigateHome={navigateToHome} />
-        : <ExplainerPage onNavigate={navigateToApp} />;
-
-    return (
-        <LanguageProvider>
-            <DocumentTitleUpdater />
-            {page}
-        </LanguageProvider>
-    )
-  };
-
-const container = document.getElementById('root');
-const root = createRoot(container!);
-root.render(<App />);

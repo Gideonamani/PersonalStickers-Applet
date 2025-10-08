@@ -807,6 +807,7 @@ main {
   align-items: center;
   position: relative;
   overflow: hidden;
+  text-align: center;
 }
 
 .sticker-image {
@@ -829,6 +830,38 @@ main {
 .sticker-grid.size-large .sticker-emoji {
     font-size: 6rem;
 }
+
+/* Expressive Sticker Type (Idle State) */
+.sticker-emoji-bg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #000;
+    opacity: 0.08;
+    z-index: 1;
+    line-height: 1;
+    transition: font-size 0.3s ease-in-out;
+}
+
+.sticker-text-fg {
+    position: relative;
+    z-index: 2;
+    font-weight: 600;
+    color: #333;
+    padding: 0 0.5rem;
+    line-height: 1.3;
+    transition: font-size 0.3s ease-in-out;
+}
+
+.sticker-grid.size-small .sticker-text-fg { font-size: 1.1rem; }
+.sticker-grid.size-small .sticker-emoji-bg { font-size: 6rem; }
+
+.sticker-grid.size-medium .sticker-text-fg { font-size: 1.4rem; }
+.sticker-grid.size-medium .sticker-emoji-bg { font-size: 8rem; }
+
+.sticker-grid.size-large .sticker-text-fg { font-size: 1.7rem; }
+.sticker-grid.size-large .sticker-emoji-bg { font-size: 10rem; }
 
 
 .sticker-label {
