@@ -1,0 +1,19 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#357abd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4a90e2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#grad1)"/>
+  <text x="50%" y="280" dominant-baseline="middle" text-anchor="middle" font-family="'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif" font-size="100" font-weight="bold" fill="white">
+    StickerMe
+  </text>
+  <text x="50%" y="360" dominant-baseline="middle" text-anchor="middle" font-family="'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif" font-size="36" font-weight="300" fill="rgba(255, 255, 255, 0.85)">
+    Your Personal AI Sticker Studio
+  </text>
+  <text x="150" y="150" font-size="120" opacity="0.1" transform="rotate(-15, 150, 150)">😂</text>
+  <text x="1000" y="500" font-size="120" opacity="0.1" transform="rotate(15, 1000, 500)">👍</text>
+  <text x="1050" y="120" font-size="90" opacity="0.1" transform="rotate(20, 1050, 120)">😎</text>
+  <text x="180" y="520" font-size="90" opacity="0.1" transform="rotate(-5, 180, 520)">✨</text>
+</svg>
