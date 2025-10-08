@@ -17,6 +17,8 @@ interface LanguageContextType {
     language: Language;
     setLanguage: (language: Language) => void;
     t: (key: string, replacements?: Record<string, string>) => string;
+    isReady: boolean;
+    translations: any | null;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -35,6 +37,7 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
         return (savedLang === 'en' || savedLang === 'sw') ? savedLang : 'sw';
     });
     const [translations, setTranslations] = useState<any | null>(null);
+    const isReady = translations !== null;
 
     useEffect(() => {
         fetch('./translations.json')
@@ -60,7 +63,7 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
     }, [language, translations]);
 
     return (
-        <LanguageContext.Provider value={{ language, setLanguage, t }}>
+        <LanguageContext.Provider value={{ language, setLanguage, t, isReady, translations }}>
             {children}
         </LanguageContext.Provider>
     );
@@ -85,13 +88,11 @@ type ExpressionType = 'plain' | 'expressive';
 
 type Expression = {
     emoji: string;
-    label: string;
+    label: string; // For default: translation key. For custom: literal text.
     type: ExpressionType;
+    isDefault: boolean;
 };
-type Sticker = {
-    emoji: string;
-    label: string;
-    type: ExpressionType;
+type Sticker = Expression & {
     imageUrl: string | null; // The final image to display/download
     originalImageUrl: string | null; // The raw image from the AI, for reprocessing
     status: StickerStatus;
@@ -608,6 +609,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
     const [previewUrl, setPreviewUrl] = useState(sticker.imageUrl);
     const [isProcessing, setIsProcessing] = useState(false);
     const modalContentRef = useRef<HTMLDivElement>(null);
+    const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
 
     useEffect(() => {
         if (!sticker.originalImageUrl) return;
@@ -649,7 +651,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
                     <div className="editor-preview">
                         <div className="checkerboard-bg">
                             {isProcessing && <div className="preview-spinner-overlay"><div className="spinner"></div></div>}
-                            <img src={previewUrl || ''} alt={`${sticker.label} preview`} />
+                            <img src={previewUrl || ''} alt={`${displayLabel} preview`} />
                         </div>
                     </div>
                     <div className="editor-controls">
@@ -900,10 +902,12 @@ const CameraSwitchIcon = () => (
 
 const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
     const { t } = useLanguage();
+    const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
+
     const handleDownload = () => {
         if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
-          const stickerName = sticker.label.replace(/\s+/g, '_');
+          const stickerName = displayLabel.replace(/\s+/g, '_');
           downloadImage(sticker.imageUrl, `${prefix}_${stickerName}.png`);
         }
     };
@@ -915,7 +919,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
             case 'loading':
                 return <div className="spinner"></div>;
             case 'done':
-                return <img src={sticker.imageUrl!} alt={sticker.label} className="sticker-image" />;
+                return <img src={sticker.imageUrl!} alt={displayLabel} className="sticker-image" />;
             case 'error':
                 return <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>;
             case 'idle':
@@ -924,11 +928,11 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                     return (
                         <>
                             <span className="sticker-emoji-bg" aria-hidden="true">{sticker.emoji}</span>
-                            <span className="sticker-text-fg">{sticker.label}</span>
+                            <span className="sticker-text-fg">{displayLabel}</span>
                         </>
                     );
                 }
-                return <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>;
+                return <span className="sticker-emoji" role="img" aria-label={displayLabel}>{sticker.emoji}</span>;
         }
     };
 
@@ -940,7 +944,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                     <button
                         className="sticker-action-btn regenerate-btn"
                         onClick={() => onRegenerate(sticker.label)}
-                        aria-label={`${t('regenerateTooltip')} ${sticker.label}`}
+                        aria-label={`${t('regenerateTooltip')} ${displayLabel}`}
                         title={t('regenerateTooltip')}
                     >
                         <RefreshIcon />
@@ -950,7 +954,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                      <button
                         className="sticker-action-btn edit-btn"
                         onClick={() => onEdit(sticker)}
-                        aria-label={`${t('editTransparencyTooltip')} ${sticker.label}`}
+                        aria-label={`${t('editTransparencyTooltip')} ${displayLabel}`}
                         title={t('editTransparencyTooltip')}
                     >
                         <EditIcon />
@@ -959,8 +963,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                 <button
                     className="sticker-action-btn delete-btn"
                     onClick={() => onRemove(sticker.label)}
-                    aria-label={`${t('deleteTooltip')} ${sticker.label}`}
-                    title={`${t('deleteTooltip')} ${sticker.label}`}
+                    aria-label={`${t('deleteTooltip')} ${displayLabel}`}
+                    title={`${t('deleteTooltip')} ${displayLabel}`}
                 >
                     <BinIcon />
                 </button>
@@ -969,9 +973,9 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
         <div className="sticker-placeholder">
             {renderContent()}
             <div className="sticker-label">
-                <span>{sticker.label}</span>
+                <span>{displayLabel}</span>
                 {sticker.imageUrl && sticker.status === 'done' && (
-                <button onClick={handleDownload} className="download-button" aria-label={`${t('downloadTooltip')} ${sticker.label}`}>
+                <button onClick={handleDownload} className="download-button" aria-label={`${t('downloadTooltip')} ${displayLabel}`}>
                     <DownloadIcon />
                 </button>
                 )}
@@ -1088,36 +1092,36 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
 };
 
 const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
-  const { t } = useLanguage();
+  const { t, isReady, translations } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getInitialExpressions = useCallback((): Expression[] => [
-    { emoji: '👍', label: t('expThumbsUp'), type: 'plain' },
-    { emoji: '😏', label: t('expCheekySmile'), type: 'plain' },
-    { emoji: '😉', label: t('expNaughtyWink'), type: 'plain' },
-    { emoji: '😎', label: t('expCoolShades'), type: 'plain' },
-    { emoji: '👏', label: t('expSlowClap'), type: 'plain' },
-    { emoji: '😔', label: t('expSadSigh'), type: 'plain' },
-    { emoji: '🤦', label: t('expFacepalm'), type: 'plain' },
-    { emoji: '☹️', label: t('expFrown'), type: 'plain' },
-    { emoji: '😋', label: t('expTongueOut'), type: 'plain' },
-    { emoji: '🤔', label: t('expCuriousThinking'), type: 'plain' },
-    { emoji: '👌', label: t('expPhrasePoapoa'), type: 'expressive' },
-    { emoji: '🧐', label: t('expPhraseNaijuaHiyo'), type: 'expressive' },
-    { emoji: '🙅', label: t('expPhraseAchaKabisa'), type: 'expressive' },
-    { emoji: '🙅‍♀️', label: t('expPhraseNoThanks'), type: 'expressive' },
-    { emoji: '🙏', label: t('expPhraseAhsanteSana'), type: 'expressive' },
-    { emoji: '⁉️', label: t('expPhraseAaah'), type: 'expressive' },
-    { emoji: '✅', label: t('expPhraseYeeap'), type: 'expressive' },
-    { emoji: '🤗', label: t('expPhraseUsiogope'), type: 'expressive' },
-    { emoji: '🤥', label: t('expPhraseUwongo'), type: 'expressive' },
-    { emoji: '🙄', label: t('expPhraseKausha'), type: 'expressive' },
-  ], [t]);
+    { emoji: '👍', label: 'expThumbsUp', type: 'plain', isDefault: true },
+    { emoji: '😏', label: 'expCheekySmile', type: 'plain', isDefault: true },
+    { emoji: '😉', label: 'expNaughtyWink', type: 'plain', isDefault: true },
+    { emoji: '😎', label: 'expCoolShades', type: 'plain', isDefault: true },
+    { emoji: '👏', label: 'expSlowClap', type: 'plain', isDefault: true },
+    { emoji: '😔', label: 'expSadSigh', type: 'plain', isDefault: true },
+    { emoji: '🤦', label: 'expFacepalm', type: 'plain', isDefault: true },
+    { emoji: '☹️', label: 'expFrown', type: 'plain', isDefault: true },
+    { emoji: '😋', label: 'expTongueOut', type: 'plain', isDefault: true },
+    { emoji: '🤔', label: 'expCuriousThinking', type: 'plain', isDefault: true },
+    { emoji: '👌', label: 'expPhrasePoapoa', type: 'expressive', isDefault: true },
+    { emoji: '🧐', label: 'expPhraseNaijuaHiyo', type: 'expressive', isDefault: true },
+    { emoji: '🙅', label: 'expPhraseAchaKabisa', type: 'expressive', isDefault: true },
+    { emoji: '🙅‍♀️', label: 'expPhraseNoThanks', type: 'expressive', isDefault: true },
+    { emoji: '🙏', label: 'expPhraseAhsanteSana', type: 'expressive', isDefault: true },
+    { emoji: '⁉️', label: 'expPhraseAaah', type: 'expressive', isDefault: true },
+    { emoji: '✅', label: 'expPhraseYeeap', type: 'expressive', isDefault: true },
+    { emoji: '🤗', label: 'expPhraseUsiogope', type: 'expressive', isDefault: true },
+    { emoji: '🤥', label: 'expPhraseUwongo', type: 'expressive', isDefault: true },
+    { emoji: '🙄', label: 'expPhraseKausha', type: 'expressive', isDefault: true },
+  ], []);
 
-  const [expressions, setExpressions] = useState<Expression[]>(() => getInitialExpressions());
+  const [expressions, setExpressions] = useState<Expression[]>([]);
   const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
-  const [stickers, setStickers] = useState<Sticker[]>(() => getInitialExpressions().map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+  const [stickers, setStickers] = useState<Sticker[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
@@ -1133,8 +1137,12 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const LOCAL_STORAGE_KEY = 'stickerMeSession';
 
-  // Load state from localStorage on initial mount
+  // Load state from localStorage once translations are ready
   useEffect(() => {
+    if (!isReady || isInitialized) {
+        return;
+    }
+
     try {
       const savedStateJSON = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (savedStateJSON) {
@@ -1142,7 +1150,6 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         if (savedState.expressions && Array.isArray(savedState.expressions)) {
           setExpressions(savedState.expressions);
         } else {
-          // If storage is there but expressions are missing/invalid, load defaults.
           setExpressions(getInitialExpressions());
         }
         if (savedState.originalFilename) {
@@ -1161,18 +1168,16 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           setGridSize(savedState.gridSize);
         }
       } else {
-        // If no saved state in localStorage, load the defaults.
         setExpressions(getInitialExpressions());
       }
     } catch (e) {
       console.error("Failed to load state from localStorage", e);
       localStorage.removeItem(LOCAL_STORAGE_KEY);
-      // On any parsing error, fallback to defaults to prevent a broken state.
       setExpressions(getInitialExpressions());
     } finally {
       setIsInitialized(true);
     }
-  }, [getInitialExpressions]);
+  }, [isReady, isInitialized, getInitialExpressions]);
 
   // Save state to localStorage whenever settings or expressions change
   useEffect(() => {
@@ -1214,7 +1219,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   const handleAddExpression = (newExpression: { emoji: string; label: string }, type: ExpressionType) => {
     if (!expressions.some(e => e.label.toLowerCase() === newExpression.label.toLowerCase())) {
-        const expressionToAdd: Expression = { ...newExpression, type };
+        const expressionToAdd: Expression = { ...newExpression, type, isDefault: false };
         setExpressions(prev => [...prev, expressionToAdd]);
         setError(null);
     } else {
@@ -1294,9 +1299,18 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     } else { // expressive
         specificInstruction = 'Create a high-energy, meme-style sticker. The character can have exaggerated features or be in a more dynamic pose to match the phrase. Feel free to add subtle, non-distracting graphic elements like motion lines or sparkles if it enhances the expression.';
     }
+    
+    const getEnglishLabel = (exp: Expression) => {
+        if (!exp.isDefault) {
+            return exp.label; // Custom labels are literal strings
+        }
+        // For default expressions, get the English translation from the key
+        return translations?.en?.[exp.label] || exp.label; // Fallback to key if not found
+    };
+    const englishLabel = getEnglishLabel(expression);
 
     try {
-        const prompt = `Generate a high-quality sticker of the character showing a "${expression.label}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+        const prompt = `Generate a high-quality sticker of the character showing a "${englishLabel}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
@@ -1366,8 +1380,9 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'my';
 
     generatedStickers.forEach(sticker => {
+      const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
       const base64Data = dataUrlToBase64(sticker.imageUrl!);
-      const filename = `${prefix}_${sticker.label.replace(/\s+/g, '_')}.png`;
+      const filename = `${prefix}_${displayLabel.replace(/\s+/g, '_')}.png`;
       zip.file(filename, base64Data, { base64: true });
     });
 
@@ -1432,3 +1447,129 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           />
         )}
         {isCameraModalOpen && (
+            <CameraModal 
+                onPictureTaken={handlePictureTaken}
+                onClose={() => setCameraModalOpen(false)}
+            />
+        )}
+        {isSourceModalOpen && (
+            <ImageSourceModal 
+                onSelectFile={() => {
+                    setSourceModalOpen(false);
+                    fileInputRef.current?.click();
+                }}
+                onSelectCamera={() => {
+                    setSourceModalOpen(false);
+                    setCameraModalOpen(true);
+                }}
+                onClose={() => setSourceModalOpen(false)}
+            />
+        )}
+        {expressionTypeToAdd && (
+            <AddExpressionModal
+                onAdd={(newExp) => handleAddExpression(newExp, expressionTypeToAdd)}
+                onClose={() => setExpressionTypeToAdd(null)}
+            />
+        )}
+        {editingSticker && (
+            <TransparencyEditorModal
+                sticker={editingSticker}
+                onSave={handleSaveTransparency}
+                onClose={() => setEditingSticker(null)}
+            />
+        )}
+
+        <StickerCreator
+          characterImage={characterImage}
+          onRequestImage={() => setSourceModalOpen(true)}
+          onGenerate={handleGenerate}
+          isLoading={isLoading}
+          backgroundColor={backgroundColor}
+          onBackgroundColorChange={(e) => setBackgroundColor(e.target.value)}
+          transparentBackground={transparentBackground}
+          onTransparentChange={(e) => setTransparentBackground(e.target.checked)}
+          artisticStyle={artisticStyle}
+          onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
+          onRestoreDefaults={handleRestoreDefaults}
+        />
+
+        {error && <p className="error-message" onClick={() => setError(null)}>{error}</p>}
+        
+        {hasGenerationStarted && (
+        <div className="generation-results">
+            <div className="results-header">
+                <div className="results-header-info">
+                    <h2>{t('resultsTitle')}</h2>
+                    <p>{t('resultsInfo')}</p>
+                </div>
+                <div className="display-size-toggler">
+                    <span>{t('viewSizeLabel')}</span>
+                    <button className={`size-toggle-btn ${gridSize === 'small' ? 'active' : ''}`} onClick={() => setGridSize('small')} title={t('viewSizeSmall')}>S</button>
+                    <button className={`size-toggle-btn ${gridSize === 'medium' ? 'active' : ''}`} onClick={() => setGridSize('medium')} title={t('viewSizeMedium')}>M</button>
+                    <button className={`size-toggle-btn ${gridSize === 'large' ? 'active' : ''}`} onClick={() => setGridSize('large')} title={t('viewSizeLarge')}>L</button>
+                </div>
+                <button 
+                    className="download-all-button" 
+                    onClick={handleDownloadAll}
+                    disabled={!hasGeneratedStickers}
+                >
+                    <DownloadIcon />
+                    {t('downloadAllButton')}
+                </button>
+            </div>
+        </div>
+        )}
+
+        <StickerGrid 
+          stickers={stickers} 
+          originalFilename={originalFilename} 
+          gridSize={gridSize}
+          onAddClick={(type) => setExpressionTypeToAdd(type)}
+          onRemove={handleRemoveExpression} 
+          onEdit={setEditingSticker}
+          onRegenerate={handleRegenerate}
+        />
+
+      </main>
+      <Footer />
+    </>
+  );
+};
+
+const App = () => {
+    const [page, setPage] = useState<'explainer' | 'app'>('explainer');
+
+    useEffect(() => {
+        // Simple routing based on a hash, could be expanded.
+        if (window.location.hash === '#create') {
+            setPage('app');
+        }
+    }, []);
+
+    const navigateToApp = () => {
+        setPage('app');
+        window.location.hash = '#create';
+    };
+    
+    const navigateToHome = () => {
+        setPage('explainer');
+        window.location.hash = '';
+    }
+
+    return (
+        <LanguageProvider>
+            {page === 'explainer' ? (
+                <ExplainerPage onNavigate={navigateToApp} />
+            ) : (
+                <StickerAppPage onNavigateHome={navigateToHome}/>
+            )}
+        </LanguageProvider>
+    );
+}
+
+const root = createRoot(document.getElementById('root')!);
+root.render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+);
