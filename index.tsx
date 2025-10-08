@@ -253,8 +253,9 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
 
 // --- React Components ---
 
-const Header = () => (
+const Header = ({ onNavigateHome }: { onNavigateHome: () => void }) => (
   <header className="app-header">
+    <button className="nav-home-btn" onClick={onNavigateHome}>Home</button>
     <h1>StickerMe</h1>
   </header>
 );
@@ -771,7 +772,67 @@ const Footer = () => (
     </footer>
   );
 
-const App = () => {
+const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => (
+<div className="explainer-page">
+    <header className="app-header explainer-header">
+    <h1>Welcome to StickerMe!</h1>
+    <p className="header-subtitle">Your Personal AI Sticker Studio</p>
+    </header>
+    <main className="explainer-content">
+    <section className="explainer-intro">
+        <h2>Turn any photo into a fun, shareable sticker pack.</h2>
+        <p>
+        Upload a picture of a friend, a pet, or your favorite character, and let our AI generate a whole set of custom stickers for you. It's fast, easy, and endlessly creative!
+        </p>
+        <button className="get-started-btn" onClick={onNavigate}>
+        Create Stickers Now
+        </button>
+    </section>
+
+    <section className="how-it-works">
+        <h2>How It Works in 4 Simple Steps</h2>
+        <div className="steps-container">
+        <div className="step-card">
+            <div className="step-icon">1</div>
+            <h3>Upload Your Image</h3>
+            <p>Choose a clear photo of a person, pet, or character. You can crop it to perfection.</p>
+        </div>
+        <div className="step-card">
+            <div className="step-icon">2</div>
+            <h3>Customize</h3>
+            <p>Select an artistic style, choose a background color, or make it transparent.</p>
+        </div>
+        <div className="step-card">
+            <div className="step-icon">3</div>
+            <h3>Add Expressions</h3>
+            <p>Use our default expressions like "Thumbs up" or add your own custom ones.</p>
+        </div>
+        <div className="step-card">
+            <div className="step-icon">4</div>
+            <h3>Generate & Download</h3>
+            <p>Click "Generate" and watch the magic happen. Download stickers one by one or as a .zip file.</p>
+        </div>
+        </div>
+    </section>
+
+    <section className="features">
+        <h2>Key Features</h2>
+        <ul>
+        <li>✨ <strong>AI-Powered Generation:</strong> Uses Google's Gemini to create high-quality, expressive stickers.</li>
+        <li>🎨 <strong>Multiple Artistic Styles:</strong> Choose from Photo-realistic, Anime, or 3D Render.</li>
+        <li>✂️ <strong>Easy Image Cropping:</strong> Focus on exactly what you want in your sticker.</li>
+        <li>👻 <strong>Advanced Transparency:</strong> Our smart algorithm removes checkerboard backgrounds for true transparency.</li>
+        <li>✏️ <strong>Fully Customizable:</strong> Add, remove, and edit expressions to create the perfect pack.</li>
+        <li>💾 <strong>Save Your Session:</strong> Your settings and expressions are saved in your browser for next time.</li>
+        <li>📦 <strong>Bulk Download:</strong> Get all your stickers in a convenient .zip file.</li>
+        </ul>
+    </section>
+    </main>
+    <Footer />
+</div>
+);
+
+const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [expressions, setExpressions] = useState<Expression[]>(INITIAL_EXPRESSIONS);
   const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
@@ -1136,7 +1197,7 @@ const App = () => {
 
   return (
     <>
-      <Header />
+      <Header onNavigateHome={onNavigateHome} />
       <main>
         {isCropModalOpen && imageToCrop && (
           <ImageCropper
@@ -1226,6 +1287,34 @@ const App = () => {
     </>
   );
 };
+
+const App = () => {
+    // Use URL hash for simple routing to allow for bookmarking and back/forward navigation
+    const [hash, setHash] = useState(window.location.hash);
+  
+    useEffect(() => {
+      const handleHashChange = () => {
+        setHash(window.location.hash);
+      };
+      window.addEventListener('hashchange', handleHashChange);
+      return () => {
+        window.removeEventListener('hashchange', handleHashChange);
+      };
+    }, []);
+  
+    const navigateToApp = () => {
+      window.location.hash = '#app';
+    };
+    
+    const navigateToHome = () => {
+      window.location.hash = '';
+    };
+    
+    if (hash === '#app') {
+      return <StickerAppPage onNavigateHome={navigateToHome} />;
+    }
+    return <ExplainerPage onNavigate={navigateToApp} />;
+  };
 
 const container = document.getElementById('root');
 const root = createRoot(container!);
