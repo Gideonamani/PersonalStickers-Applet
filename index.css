@@ -45,6 +45,40 @@ body {
     border-color: white;
 }
 
+.language-switcher {
+    grid-column: 3;
+    justify-self: end;
+    display: flex;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.language-switcher button {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.language-switcher button:not(:last-child) {
+    border-right: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.language-switcher button.active {
+    background-color: white;
+    color: #4a90e2;
+}
+
+.language-switcher button:not(.active):hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
 main {
   padding: 2rem;
   max-width: 1200px;
@@ -71,10 +105,17 @@ main {
     display: block; /* Override grid */
     text-align: center;
     padding: 3rem 1rem;
+    position: relative; /* Context for language switcher */
 }
 
 .app-header.explainer-header h1 {
     grid-column: auto;
+}
+
+.explainer-header .language-switcher {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
 }
 
 .header-subtitle {

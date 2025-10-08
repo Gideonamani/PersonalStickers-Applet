@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, ChangeEvent, useRef, useEffect } from 'react';
+import React, { useState, ChangeEvent, useRef, useEffect, createContext, useContext, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Modality } from '@google/genai';
 import JSZip from 'jszip';
@@ -10,23 +10,67 @@ import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from
 
 import './index.css';
 
+// --- Localization ---
+type Language = 'sw' | 'en';
+
+interface LanguageContextType {
+    language: Language;
+    setLanguage: (language: Language) => void;
+    t: (key: string, replacements?: Record<string, string>) => string;
+}
+
+const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+
+const useLanguage = () => {
+    const context = useContext(LanguageContext);
+    if (!context) {
+        throw new Error('useLanguage must be used within a LanguageProvider');
+    }
+    return context;
+};
+
+const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [language, setLanguageState] = useState<Language>(() => {
+        const savedLang = localStorage.getItem('stickerMeLanguage');
+        return (savedLang === 'en' || savedLang === 'sw') ? savedLang : 'sw';
+    });
+    const [translations, setTranslations] = useState<any | null>(null);
+
+    useEffect(() => {
+        fetch('./translations.json')
+            .then(response => response.json())
+            .then(data => setTranslations(data))
+            .catch(error => console.error('Error loading translations:', error));
+    }, []);
+
+    const setLanguage = (lang: Language) => {
+        localStorage.setItem('stickerMeLanguage', lang);
+        setLanguageState(lang);
+    };
+
+    const t = useCallback((key: string, replacements: Record<string, string> = {}) => {
+        if (!translations) {
+            return key;
+        }
+        let text = translations[language]?.[key] || translations.en?.[key] || key;
+        for (const placeholder in replacements) {
+            text = text.replace(`{${placeholder}}`, replacements[placeholder]);
+        }
+        return text;
+    }, [language, translations]);
+
+    return (
+        <LanguageContext.Provider value={{ language, setLanguage, t }}>
+            {children}
+        </LanguageContext.Provider>
+    );
+};
+
+
 // --- Gemini API Configuration ---
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- App Constants ---
-const INITIAL_EXPRESSIONS = [
-  { emoji: '👍', label: 'Thumbs up' },
-  { emoji: '😏', label: 'Cheeky smile' },
-  { emoji: '😉', label: 'Naughty wink' },
-  { emoji: '😎', label: 'Cool shades' },
-  { emoji: '👏', label: 'Slow clap' },
-  { emoji: '😔', label: 'Sad sigh' },
-  { emoji: '🤦', label: 'Facepalm frustration' },
-  { emoji: '☹️', label: 'Frown lips' },
-  { emoji: '😋', label: 'Tongue out' },
-  { emoji: '🤔', label: 'Curious thinking' },
-];
-
 const POPULAR_EMOJIS = [
     '😊', '😂', '😍', '🥰', '😎', '🤔', '😉', '😋', '😜', '🤪', 
     '🤩', '🥳', '😏', '😒', '😞', '😔', '😢', '😭', '😱', '😡',
@@ -68,15 +112,6 @@ const downloadImage = (imageUrl: string, filename: string) => {
   document.body.removeChild(link);
 };
 
-/**
- * Processes an image data URL to make checkerboard-like backgrounds transparent.
- * This is an advanced algorithm that uses CIELAB color difference, robust color sampling,
- * and gradient detection to intelligently identify and remove checkerboard patterns
- * while preserving the subject.
- * @param imageUrl The base64 data URL of the image to process.
- * @param opts Options for tuning the algorithm.
- * @returns A promise that resolves with the new data URL of the processed image.
- */
 const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyOptions> = {}): Promise<string> => {
     return new Promise(async (resolve) => {
         try {
@@ -104,8 +139,6 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
             
             const imgData = ctx.getImageData(0, 0, W, H);
             const d = imgData.data;
-
-            // --- helpers ---
             const rgb2lab = (r: number, g: number, b: number): number[] => {
                 const srgb = [r / 255, g / 255, b / 255].map(u =>
                     u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4)
@@ -117,11 +150,9 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
                 const xn = 0.95047, yn = 1.00000, zn = 1.08883;
                 const f = (t: number) => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
                 const fx = f(X / xn), fy = f(Y / yn), fz = f(Z / zn);
-                return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]; // L*, a*, b*
+                return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
             };
             const distLab = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-
-            // --- 1) Sample two checker colors from corners (robust median) ---
             const medianColor = (samples: number[][]): number[] => {
                 const rs = samples.map(p => p[0]).sort((a, b) => a - b);
                 const gs = samples.map(p => p[1]).sort((a, b) => a - b);
@@ -147,8 +178,6 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
             const c1 = medianColor(light);
             const c2 = medianColor(dark);
             const c1Lab = rgb2lab(c1[0], c1[1], c1[2]), c2Lab = rgb2lab(c2[0], c2[1], c2[2]);
-
-            // --- 2) Estimate checker tile period ---
             const scorePeriod = (p: number): number => {
                 let score = 0, step = Math.max(1, Math.floor(W / 64));
                 for (let y = 0; y < H; y += step) {
@@ -167,8 +196,6 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
                 const s = scorePeriod(p); if (s > bestS) { bestS = s; bestP = p; }
             }
             const P = bestP;
-
-            // --- 3) Precompute gradient magnitude ---
             const grad = new Float32Array(W * H);
             const get = (x: number, y: number, c: number) => d[(y * W + x) * 4 + c];
             for (let y = 1; y < H - 1; y++) {
@@ -181,8 +208,6 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
                     grad[y * W + x] = Math.hypot(gx, gy) / 8;
                 }
             }
-
-            // --- 4) Build background-likelihood map ---
             const like = new Float32Array(W * H);
             for (let y = 0; y < H; y++) {
                 for (let x = 0; x < W; x++) {
@@ -197,8 +222,6 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
                     like[y * W + x] = L;
                 }
             }
-
-            // --- 5) Edge-connected flood fill ---
             const qx = new Int32Array(W * H), qy = new Int32Array(W * H);
             const seen = new Uint8Array(W * H);
             let qh = 0, qt = 0;
@@ -216,8 +239,6 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
                     }
                 });
             }
-
-            // --- 6) Feather mask and apply alpha ---
             const mask = new Float32Array(W * H);
             for (let i = 0; i < W * H; i++) mask[i] = like[i] >= 1.0 ? 1 : 0;
             if (feather > 0) {
@@ -236,29 +257,55 @@ const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyO
                 }
                 mask.set(tmp);
             }
-
             for (let i = 0; i < W * H; i++) {
                 d[i * 4 + 3] = Math.round((1 - mask[i]) * 255);
             }
             ctx.putImageData(imgData, 0, 0);
-
             resolve(canvas.toDataURL('image/png'));
-
         } catch (error) {
             console.error('Error processing image for transparency:', error);
-            resolve(imageUrl); // Fallback to original image
+            resolve(imageUrl);
         }
     });
 };
 
 // --- React Components ---
 
-const Header = ({ onNavigateHome }: { onNavigateHome: () => void }) => (
-  <header className="app-header">
-    <button className="nav-home-btn" onClick={onNavigateHome}>Home</button>
-    <h1>StickerMe</h1>
-  </header>
-);
+const LanguageSwitcher = () => {
+    const { language, setLanguage, t } = useLanguage();
+  
+    return (
+      <div className="language-switcher" role="group" aria-label="Language selection">
+        <button
+          onClick={() => setLanguage('en')}
+          className={language === 'en' ? 'active' : ''}
+          aria-pressed={language === 'en'}
+          title={t('english')}
+        >
+          EN
+        </button>
+        <button
+          onClick={() => setLanguage('sw')}
+          className={language === 'sw' ? 'active' : ''}
+          aria-pressed={language === 'sw'}
+          title={t('swahili')}
+        >
+          SW
+        </button>
+      </div>
+    );
+};
+
+const Header = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
+    const { t } = useLanguage();
+    return (
+        <header className="app-header">
+          <button className="nav-home-btn" onClick={onNavigateHome}>{t('homeButton')}</button>
+          <h1>{t('appName')}</h1>
+          <LanguageSwitcher />
+        </header>
+    );
+};
 
 const ImageCropper = ({
     imageSrc,
@@ -269,6 +316,7 @@ const ImageCropper = ({
     onSave: (croppedImageDataUrl: string) => void;
     onCancel: () => void;
   }) => {
+    const { t } = useLanguage();
     const [crop, setCrop] = useState<Crop>();
     const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
     const imgRef = useRef<HTMLImageElement>(null);
@@ -319,8 +367,8 @@ const ImageCropper = ({
     return (
       <div className="crop-modal" onClick={handleBackdropClick}>
         <div className="crop-modal-content">
-          <h3>Crop your image</h3>
-          <p>Select the portion of the image you want to turn into a sticker.</p>
+          <h3>{t('cropTitle')}</h3>
+          <p>{t('cropInfo')}</p>
           <div className="crop-container">
             <ReactCrop
               crop={crop}
@@ -332,8 +380,8 @@ const ImageCropper = ({
             </ReactCrop>
           </div>
           <div className="crop-modal-actions">
-            <button onClick={onCancel} className="modal-button secondary">Cancel</button>
-            <button onClick={handleCrop} className="modal-button primary">Crop & Use</button>
+            <button onClick={onCancel} className="modal-button secondary">{t('cancelButton')}</button>
+            <button onClick={handleCrop} className="modal-button primary">{t('cropAndUseButton')}</button>
           </div>
         </div>
       </div>
@@ -365,11 +413,12 @@ const StickerCreator = ({
   onArtisticStyleChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onRestoreDefaults: () => void;
 }) => {
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); // Necessary to allow drop
+    e.preventDefault();
   };
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
@@ -395,7 +444,6 @@ const StickerCreator = ({
     fileInputRef.current?.click();
   };
 
-
   return (
     <div className="sticker-creator">
       <div
@@ -413,26 +461,26 @@ const StickerCreator = ({
         ) : (
             <div className="character-placeholder">
               <span>📷</span>
-              <span className="placeholder-text">Drag & drop an image or click to upload</span>
+              <span className="placeholder-text">{t('uploadPlaceholder')}</span>
             </div>
         )}
       </div>
       <div className="creator-controls">
-        <h2>Your Personal Sticker Studio</h2>
+        <h2>{t('creatorTitle')}</h2>
         <div className="instructions">
-            <h4>How it works:</h4>
+            <h4>{t('creatorHowItWorks')}</h4>
             <ol>
-                <li><span>Upload a photo</span> of a person, pet, or character.</li>
-                <li><span>Choose your style</span> and background options.</li>
-                <li><span>Generate Stickers</span> and watch the AI create a unique pack!</li>
+                <li dangerouslySetInnerHTML={{ __html: t('creatorStep1') }}></li>
+                <li dangerouslySetInnerHTML={{ __html: t('creatorStep2') }}></li>
+                <li dangerouslySetInnerHTML={{ __html: t('creatorStep3') }}></li>
             </ol>
         </div>
         <div className="style-controls">
-          <label htmlFor="artisticStyle">Artistic Style</label>
+          <label htmlFor="artisticStyle">{t('artisticStyleLabel')}</label>
           <select id="artisticStyle" value={artisticStyle} onChange={onArtisticStyleChange}>
-            <option value="Photo-realistic">Photo-realistic</option>
-            <option value="Anime">Anime</option>
-            <option value="3D Render">3D Render</option>
+            <option value="Photo-realistic">{t('styleRealistic')}</option>
+            <option value="Anime">{t('styleAnime')}</option>
+            <option value="3D Render">{t('style3d')}</option>
           </select>
         </div>
         <div className="background-controls">
@@ -442,7 +490,7 @@ const StickerCreator = ({
                 checked={transparentBackground}
                 onChange={onTransparentChange}
             />
-            <label htmlFor="transparentBg">Transparent Background</label>
+            <label htmlFor="transparentBg">{t('transparentBgLabel')}</label>
             <input
                 type="color"
                 id="bgColorPicker"
@@ -465,12 +513,12 @@ const StickerCreator = ({
                 id="imageUpload"
             />
              <label htmlFor="imageUpload" className="upload-button">
-                Upload Image
+                {t('uploadButton')}
             </label>
             <button onClick={onGenerate} className="generate-button" disabled={isLoading || !characterImage}>
-                {isLoading ? 'Generating...' : 'Generate Stickers'}
+                {isLoading ? t('generatingButton') : t('generateButton')}
             </button>
-            <button onClick={onRestoreDefaults} className="restore-defaults-button" title="Restore Defaults">
+            <button onClick={onRestoreDefaults} className="restore-defaults-button" title={t('restoreDefaultsButton')}>
                 <RefreshIcon />
             </button>
         </div>
@@ -492,6 +540,7 @@ const EmojiPicker = ({ onSelect }: { onSelect: (emoji: string) => void }) => {
 };
 
 const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: Expression) => void; onClose: () => void }) => {
+    const { t } = useLanguage();
     const [newEmoji, setNewEmoji] = useState('😀');
     const [newLabel, setNewLabel] = useState('');
     const [isPickerOpen, setPickerOpen] = useState(false);
@@ -531,7 +580,7 @@ const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: Expression
     return (
       <div className="modal-backdrop" onClick={handleBackdropClick}>
         <div className="modal-content" ref={modalContentRef}>
-          <h3>Add New Expression</h3>
+          <h3>{t('addExpressionTitle')}</h3>
           <form onSubmit={handleAdd} className="add-expression-modal-form">
             <div className="form-row">
                 <div className="emoji-input-wrapper" ref={pickerRef}>
@@ -544,15 +593,15 @@ const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: Expression
                     type="text"
                     value={newLabel}
                     onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="Label (e.g., Laughing)"
+                    placeholder={t('addExpressionLabelPlaceholder')}
                     className="label-input"
                     required
                     autoFocus
                 />
             </div>
             <div className="modal-actions">
-              <button type="button" onClick={onClose} className="modal-button secondary">Cancel</button>
-              <button type="submit" className="modal-button primary">Add Expression</button>
+              <button type="button" onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
+              <button type="submit" className="modal-button primary">{t('addButton')}</button>
             </div>
           </form>
         </div>
@@ -561,6 +610,7 @@ const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: Expression
   };
 
 const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticker; onSave: (label: string, newImageUrl: string) => void; onClose: () => void; }) => {
+    const { t } = useLanguage();
     const [params, setParams] = useState<TransparencyOptions>({
         colorTol: 10,
         tileGuess: 16,
@@ -580,7 +630,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
                 setPreviewUrl(newUrl);
                 setIsProcessing(false);
             });
-        }, 300); // Debounce processing
+        }, 300);
 
         return () => {
             clearTimeout(handler);
@@ -606,7 +656,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
     return (
         <div className="modal-backdrop" onClick={handleBackdropClick}>
             <div className="transparency-editor-modal" ref={modalContentRef}>
-                <h3>Fine-tune Transparency</h3>
+                <h3>{t('transparencyTitle')}</h3>
                 <div className="editor-content">
                     <div className="editor-preview">
                         <div className="checkerboard-bg">
@@ -616,26 +666,26 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
                     </div>
                     <div className="editor-controls">
                         <div className="slider-control">
-                            <label htmlFor="colorTol">Color Tolerance ({params.colorTol})</label>
+                            <label htmlFor="colorTol">{t('colorToleranceLabel')} ({params.colorTol})</label>
                             <input type="range" id="colorTol" min="4" max="24" value={params.colorTol} onChange={e => handleParamChange('colorTol', e.target.value)} />
                         </div>
                         <div className="slider-control">
-                            <label htmlFor="tileGuess">Tile Size ({params.tileGuess})</label>
+                            <label htmlFor="tileGuess">{t('tileSizeLabel')} ({params.tileGuess})</label>
                             <input type="range" id="tileGuess" min="8" max="32" value={params.tileGuess} onChange={e => handleParamChange('tileGuess', e.target.value)} />
                         </div>
                         <div className="slider-control">
-                            <label htmlFor="gradKeep">Texture Protection ({params.gradKeep})</label>
+                            <label htmlFor="gradKeep">{t('textureProtectionLabel')} ({params.gradKeep})</label>
                             <input type="range" id="gradKeep" min="4" max="24" value={params.gradKeep} onChange={e => handleParamChange('gradKeep', e.target.value)} />
                         </div>
                         <div className="slider-control">
-                            <label htmlFor="feather">Edge Feather ({params.feather})</label>
+                            <label htmlFor="feather">{t('edgeFeatherLabel')} ({params.feather})</label>
                             <input type="range" id="feather" min="0" max="8" value={params.feather} onChange={e => handleParamChange('feather', e.target.value)} />
                         </div>
                     </div>
                 </div>
                 <div className="modal-actions">
-                    <button onClick={onClose} className="modal-button secondary">Cancel</button>
-                    <button onClick={handleSave} className="modal-button primary">Save Changes</button>
+                    <button onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
+                    <button onClick={handleSave} className="modal-button primary">{t('saveChangesButton')}</button>
                 </div>
             </div>
         </div>
@@ -679,6 +729,7 @@ const AddIcon = () => (
 
 
 const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
+    const { t } = useLanguage();
     const handleDownload = () => {
         if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
@@ -696,7 +747,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
             case 'done':
             return <img src={sticker.imageUrl!} alt={sticker.label} className="sticker-image" />;
             case 'error':
-            return <span className="sticker-emoji" role="img" aria-label="Error">⚠️</span>;
+            return <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>;
             case 'idle':
             default:
             return <span className="sticker-emoji" role="img" aria-label={sticker.label}>{sticker.emoji}</span>;
@@ -711,8 +762,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                     <button
                         className="sticker-action-btn regenerate-btn"
                         onClick={() => onRegenerate(sticker.label)}
-                        aria-label={`Regenerate ${sticker.label} sticker`}
-                        title="Regenerate"
+                        aria-label={`${t('regenerateTooltip')} ${sticker.label}`}
+                        title={t('regenerateTooltip')}
                     >
                         <RefreshIcon />
                     </button>
@@ -721,8 +772,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                      <button
                         className="sticker-action-btn edit-btn"
                         onClick={() => onEdit(sticker)}
-                        aria-label={`Edit transparency for ${sticker.label}`}
-                        title="Edit Transparency"
+                        aria-label={`${t('editTransparencyTooltip')} ${sticker.label}`}
+                        title={t('editTransparencyTooltip')}
                     >
                         <EditIcon />
                     </button>
@@ -730,8 +781,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                 <button
                     className="sticker-action-btn delete-btn"
                     onClick={() => onRemove(sticker.label)}
-                    aria-label={`Delete ${sticker.label} expression`}
-                    title={`Delete ${sticker.label}`}
+                    aria-label={`${t('deleteTooltip')} ${sticker.label}`}
+                    title={`${t('deleteTooltip')} ${sticker.label}`}
                 >
                     <BinIcon />
                 </button>
@@ -742,7 +793,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
             <div className="sticker-label">
                 <span>{sticker.label}</span>
                 {sticker.imageUrl && sticker.status === 'done' && (
-                <button onClick={handleDownload} className="download-button" aria-label={`Download ${sticker.label} sticker`}>
+                <button onClick={handleDownload} className="download-button" aria-label={`${t('downloadTooltip')} ${sticker.label}`}>
                     <DownloadIcon />
                 </button>
                 )}
@@ -754,17 +805,20 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
 
 type GridSize = 'small' | 'medium' | 'large';
 
-const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: () => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => (
-  <section className={`sticker-grid size-${gridSize}`}>
-    {stickers.map((sticker) => (
-      <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} onRemove={onRemove} onEdit={onEdit} onRegenerate={onRegenerate} />
-    ))}
-    <button className="add-sticker-btn" onClick={onAddClick} aria-label="Add new expression">
-        <AddIcon />
-        <span>Add Expression</span>
-    </button>
-  </section>
-);
+const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: () => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => {
+    const { t } = useLanguage();
+    return (
+        <section className={`sticker-grid size-${gridSize}`}>
+            {stickers.map((sticker) => (
+            <StickerItem key={sticker.label} sticker={sticker} originalFilename={originalFilename} onRemove={onRemove} onEdit={onEdit} onRegenerate={onRegenerate} />
+            ))}
+            <button className="add-sticker-btn" onClick={onAddClick} aria-label={t('addExpressionButton')}>
+                <AddIcon />
+                <span>{t('addExpressionButton')}</span>
+            </button>
+        </section>
+    );
+};
 
 const Footer = () => (
     <footer className="app-footer">
@@ -772,73 +826,88 @@ const Footer = () => (
     </footer>
   );
 
-const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => (
-<div className="explainer-page">
-    <header className="app-header explainer-header">
-    <h1>Welcome to StickerMe!</h1>
-    <p className="header-subtitle">Your Personal AI Sticker Studio</p>
-    </header>
-    <main className="explainer-content">
-    <section className="explainer-intro">
-        <h2>Turn any photo into a fun, shareable sticker pack.</h2>
-        <p>
-        Upload a picture of a friend, a pet, or your favorite character, and let our AI generate a whole set of custom stickers for you. It's fast, easy, and endlessly creative!
-        </p>
-        <button className="get-started-btn" onClick={onNavigate}>
-        Create Stickers Now
-        </button>
-    </section>
+const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
+    const { t } = useLanguage();
+    return (
+        <div className="explainer-page">
+            <header className="app-header explainer-header">
+                <LanguageSwitcher />
+                <h1>{t('explainerWelcome')}</h1>
+                <p className="header-subtitle">{t('explainerSubtitle')}</p>
+            </header>
+            <main className="explainer-content">
+            <section className="explainer-intro">
+                <h2>{t('explainerIntroTitle')}</h2>
+                <p>{t('explainerIntroP')}</p>
+                <button className="get-started-btn" onClick={onNavigate}>
+                {t('getStartedButton')}
+                </button>
+            </section>
 
-    <section className="how-it-works">
-        <h2>How It Works in 4 Simple Steps</h2>
-        <div className="steps-container">
-        <div className="step-card">
-            <div className="step-icon">1</div>
-            <h3>Upload Your Image</h3>
-            <p>Choose a clear photo of a person, pet, or character. You can crop it to perfection.</p>
-        </div>
-        <div className="step-card">
-            <div className="step-icon">2</div>
-            <h3>Customize</h3>
-            <p>Select an artistic style, choose a background color, or make it transparent.</p>
-        </div>
-        <div className="step-card">
-            <div className="step-icon">3</div>
-            <h3>Add Expressions</h3>
-            <p>Use our default expressions like "Thumbs up" or add your own custom ones.</p>
-        </div>
-        <div className="step-card">
-            <div className="step-icon">4</div>
-            <h3>Generate & Download</h3>
-            <p>Click "Generate" and watch the magic happen. Download stickers one by one or as a .zip file.</p>
-        </div>
-        </div>
-    </section>
+            <section className="how-it-works">
+                <h2>{t('howItWorksTitle')}</h2>
+                <div className="steps-container">
+                    <div className="step-card">
+                        <div className="step-icon">1</div>
+                        <h3>{t('step1Title')}</h3>
+                        <p>{t('step1P')}</p>
+                    </div>
+                    <div className="step-card">
+                        <div className="step-icon">2</div>
+                        <h3>{t('step2Title')}</h3>
+                        <p>{t('step2P')}</p>
+                    </div>
+                    <div className="step-card">
+                        <div className="step-icon">3</div>
+                        <h3>{t('step3Title')}</h3>
+                        <p>{t('step3P')}</p>
+                    </div>
+                    <div className="step-card">
+                        <div className="step-icon">4</div>
+                        <h3>{t('step4Title')}</h3>
+                        <p>{t('step4P')}</p>
+                    </div>
+                </div>
+            </section>
 
-    <section className="features">
-        <h2>Key Features</h2>
-        <ul>
-        <li>✨ <strong>AI-Powered Generation:</strong> Uses Google's Gemini to create high-quality, expressive stickers.</li>
-        <li>🎨 <strong>Multiple Artistic Styles:</strong> Choose from Photo-realistic, Anime, or 3D Render.</li>
-        <li>✂️ <strong>Easy Image Cropping:</strong> Focus on exactly what you want in your sticker.</li>
-        <li>👻 <strong>Advanced Transparency:</strong> Our smart algorithm removes checkerboard backgrounds for true transparency.</li>
-        <li>✏️ <strong>Fully Customizable:</strong> Add, remove, and edit expressions to create the perfect pack.</li>
-        <li>💾 <strong>Save Your Session:</strong> Your settings and expressions are saved in your browser for next time.</li>
-        <li>📦 <strong>Bulk Download:</strong> Get all your stickers in a convenient .zip file.</li>
-        </ul>
-    </section>
-    </main>
-    <Footer />
-</div>
-);
+            <section className="features">
+                <h2>{t('featuresTitle')}</h2>
+                <ul>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureAI') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureStyles') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureCrop') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureTransparency') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureCustomize') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureSave') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureBulk') }}></li>
+                </ul>
+            </section>
+            </main>
+            <Footer />
+        </div>
+    );
+};
 
 const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
-  const [expressions, setExpressions] = useState<Expression[]>(INITIAL_EXPRESSIONS);
+  const { t } = useLanguage();
+
+  const getInitialExpressions = useCallback(() => [
+    { emoji: '👍', label: t('expThumbsUp') },
+    { emoji: '😏', label: t('expCheekySmile') },
+    { emoji: '😉', label: t('expNaughtyWink') },
+    { emoji: '😎', label: t('expCoolShades') },
+    { emoji: '👏', label: t('expSlowClap') },
+    { emoji: '😔', label: t('expSadSigh') },
+    { emoji: '🤦', label: t('expFacepalm') },
+    { emoji: '☹️', label: t('expFrown') },
+    { emoji: '😋', label: t('expTongueOut') },
+    { emoji: '🤔', label: t('expCuriousThinking') },
+  ], [t]);
+
+  const [expressions, setExpressions] = useState<Expression[]>(() => getInitialExpressions());
   const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
-  const [stickers, setStickers] = useState<Sticker[]>(
-    INITIAL_EXPRESSIONS.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const }))
-  );
+  const [stickers, setStickers] = useState<Sticker[]>(() => getInitialExpressions().map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
@@ -860,6 +929,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         const savedState = JSON.parse(savedStateJSON);
         if (savedState.expressions && Array.isArray(savedState.expressions)) {
           setExpressions(savedState.expressions);
+        } else {
+          setExpressions(getInitialExpressions());
         }
         if (savedState.originalFilename) {
           setOriginalFilename(savedState.originalFilename);
@@ -883,20 +954,17 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     } finally {
       setIsInitialized(true);
     }
-  }, []);
+  }, [getInitialExpressions]);
 
   // Save state to localStorage whenever settings or expressions change
   useEffect(() => {
     if (!isInitialized) {
-      return; // Don't save until initial state is loaded
+      return;
     }
     try {
-      // Create a snapshot of the session data that we want to persist.
-      // Importantly, we do NOT save any image data (userImage, sticker images)
-      // to avoid exceeding localStorage limits and to ensure a fresh start on page load.
       const sessionData = {
         expressions,
-        originalFilename, // We save the filename, not the image itself
+        originalFilename,
         artisticStyle,
         backgroundColor,
         transparentBackground,
@@ -917,13 +985,11 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   ]);
 
   useEffect(() => {
-    // Keep stickers in sync with the expressions list
     setStickers(prevStickers => {
       const newStickers = expressions.map(exp => {
         const existingSticker = prevStickers.find(s => s.label === exp.label);
         return existingSticker || { ...exp, imageUrl: null, originalImageUrl: null, status: 'idle' as const };
       });
-      // Filter out stickers whose expressions have been removed
       return newStickers.filter(s => expressions.some(e => e.label === s.label));
     });
   }, [expressions]);
@@ -933,7 +999,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         setExpressions(prev => [...prev, newExpression]);
         setError(null);
     } else {
-        setError(`An expression with the label "${newExpression.label}" already exists.`);
+        setError(t('errorExpressionExists', { label: newExpression.label }));
     }
     setAddModalOpen(false);
   };
@@ -952,16 +1018,15 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       };
       reader.readAsDataURL(file);
     } else if (file) {
-      setError("Please select a valid image file (e.g., PNG, JPG, GIF).");
+      setError(t('errorInvalidFile'));
     }
   };
 
   const handleCropSave = (croppedImageDataUrl: string) => {
     setUserImage({
       data: croppedImageDataUrl,
-      mimeType: 'image/png', // Canvas output is always png
+      mimeType: 'image/png',
     });
-    // Reset stickers when a new image is uploaded
     setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
     setError(null);
     setCropModalOpen(false);
@@ -980,16 +1045,16 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   const handleGenerate = async () => {
     if (!userImage) {
-        setError("Please upload an image first!");
+        setError(t('errorUploadFirst'));
         return;
     }
     if (expressions.length === 0) {
-        setError("Please add at least one expression to generate stickers.");
+        setError(t('errorNeedExpression'));
         return;
     }
     setIsLoading(true);
     setError(null);
-    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const }))); // Reset stickers
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
 
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
 
@@ -1060,7 +1125,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       }
     } catch (err) {
       console.error('Error during generation process:', err);
-      setError('Sorry, a major error occurred while creating the stickers. Please try again.');
+      setError(t('errorMajor'));
     } finally {
       setIsLoading(false);
     }
@@ -1068,7 +1133,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   const handleRegenerate = async (label: string) => {
     if (!userImage) {
-        setError("Please upload an image first to regenerate a sticker.");
+        setError(t('errorUploadFirst'));
         return;
     }
 
@@ -1172,10 +1237,13 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   };
 
   const handleRestoreDefaults = () => {
-    if (window.confirm('Are you sure you want to restore all default expressions and settings? This action will clear your current session.')) {
+    if (window.confirm(t('confirmRestore'))) {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
+      
+      const defaults = getInitialExpressions();
+      setExpressions(defaults);
+      setStickers(defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
 
-      setExpressions(INITIAL_EXPRESSIONS);
       setUserImage(null);
       setOriginalFilename(null);
       setIsLoading(false);
@@ -1236,14 +1304,14 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
             {hasGenerationStarted && (
                 <div className="results-header">
                     <div className="results-header-info">
-                        <p>Here are your generated stickers. Add more, or download them individually or all at once!</p>
+                        <p>{t('resultsInfo')}</p>
                         <div className="display-size-toggler" role="group" aria-label="Sticker display size">
-                            <span>View size:</span>
+                            <span>{t('viewSizeLabel')}</span>
                             <button
                                 className={`size-toggle-btn ${gridSize === 'small' ? 'active' : ''}`}
                                 onClick={() => setGridSize('small')}
                                 aria-pressed={gridSize === 'small'}
-                                title="Small view"
+                                title={t('viewSizeSmall')}
                             >
                                 S
                             </button>
@@ -1251,7 +1319,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                                 className={`size-toggle-btn ${gridSize === 'medium' ? 'active' : ''}`}
                                 onClick={() => setGridSize('medium')}
                                 aria-pressed={gridSize === 'medium'}
-                                title="Medium view"
+                                title={t('viewSizeMedium')}
                             >
                                 M
                             </button>
@@ -1259,7 +1327,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                                 className={`size-toggle-btn ${gridSize === 'large' ? 'active' : ''}`}
                                 onClick={() => setGridSize('large')}
                                 aria-pressed={gridSize === 'large'}
-                                title="Large view"
+                                title={t('viewSizeLarge')}
                             >
                                 L
                             </button>
@@ -1267,7 +1335,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                     </div>
                     <button onClick={handleDownloadAll} className="download-all-button" disabled={!hasGeneratedStickers}>
                         <DownloadIcon />
-                        Download All (.zip)
+                        {t('downloadAllButton')}
                     </button>
                 </div>
             )}
@@ -1288,8 +1356,15 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   );
 };
 
+const DocumentTitleUpdater = () => {
+    const { t } = useLanguage();
+    useEffect(() => {
+        document.title = t('appName');
+    }, [t]);
+    return null; // This component does not render anything
+};
+
 const App = () => {
-    // Use URL hash for simple routing to allow for bookmarking and back/forward navigation
     const [hash, setHash] = useState(window.location.hash);
   
     useEffect(() => {
@@ -1310,10 +1385,16 @@ const App = () => {
       window.location.hash = '';
     };
     
-    if (hash === '#app') {
-      return <StickerAppPage onNavigateHome={navigateToHome} />;
-    }
-    return <ExplainerPage onNavigate={navigateToApp} />;
+    const page = hash === '#app' 
+        ? <StickerAppPage onNavigateHome={navigateToHome} />
+        : <ExplainerPage onNavigate={navigateToApp} />;
+
+    return (
+        <LanguageProvider>
+            <DocumentTitleUpdater />
+            {page}
+        </LanguageProvider>
+    )
   };
 
 const container = document.getElementById('root');
