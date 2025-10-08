@@ -528,9 +528,9 @@ const EmojiPicker = ({ onSelect }: { onSelect: (emoji: string) => void }) => {
     );
 };
 
-const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: {emoji: string, label: string}) => void; onClose: () => void }) => {
+const AddExpressionModal = ({ type, onAdd, onClose }: { type: ExpressionType; onAdd: (expression: {emoji: string, label: string}) => void; onClose: () => void }) => {
     const { t } = useLanguage();
-    const [newEmoji, setNewEmoji] = useState('😀');
+    const [newEmoji, setNewEmoji] = useState(type === 'plain' ? '😀' : '');
     const [newLabel, setNewLabel] = useState('');
     const [isPickerOpen, setPickerOpen] = useState(false);
     const pickerRef = useRef<HTMLDivElement>(null);
@@ -538,7 +538,7 @@ const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: {emoji: st
 
     const handleAdd = (e: React.FormEvent) => {
       e.preventDefault();
-      if (newEmoji && newLabel) {
+      if (newLabel && (type === 'expressive' || newEmoji)) {
         onAdd({ emoji: newEmoji, label: newLabel });
       }
     };
@@ -569,25 +569,46 @@ const AddExpressionModal = ({ onAdd, onClose }: { onAdd: (expression: {emoji: st
     return (
       <div className="modal-backdrop" onClick={handleBackdropClick}>
         <div className="modal-content" ref={modalContentRef}>
-          <h3>{t('addExpressionTitle')}</h3>
+          <h3>{type === 'plain' ? t('addEmotionTitle') : t('addPhraseTitle')}</h3>
           <form onSubmit={handleAdd} className="add-expression-modal-form">
-            <div className="form-row">
-                <div className="emoji-input-wrapper" ref={pickerRef}>
-                    <button type="button" onClick={() => setPickerOpen(!isPickerOpen)} className="emoji-input-btn">
-                        {newEmoji}
-                    </button>
-                    {isPickerOpen && <EmojiPicker onSelect={handleEmojiSelect} />}
+            {type === 'plain' ? (
+                <div className="form-row">
+                    <div className="emoji-input-wrapper" ref={pickerRef}>
+                        <button type="button" onClick={() => setPickerOpen(!isPickerOpen)} className="emoji-input-btn">
+                            {newEmoji}
+                        </button>
+                        {isPickerOpen && <EmojiPicker onSelect={handleEmojiSelect} />}
+                    </div>
+                    <input
+                        type="text"
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        placeholder={t('addExpressionLabelPlaceholder')}
+                        className="label-input"
+                        required
+                        autoFocus
+                    />
                 </div>
-                <input
-                    type="text"
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder={t('addExpressionLabelPlaceholder')}
-                    className="label-input"
-                    required
-                    autoFocus
-                />
-            </div>
+            ) : (
+                <>
+                    <input
+                        type="text"
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        placeholder={t('addExpressionLabelPlaceholder')}
+                        className="label-input"
+                        required
+                        autoFocus
+                    />
+                     <input
+                        type="text"
+                        value={newEmoji}
+                        onChange={(e) => setNewEmoji(e.target.value)}
+                        placeholder={t('addPhraseEmojiPlaceholder')}
+                        className="label-input"
+                    />
+                </>
+            )}
             <div className="modal-actions">
               <button type="button" onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
               <button type="submit" className="modal-button primary">{t('addButton')}</button>
@@ -993,27 +1014,30 @@ const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemov
     const plainStickers = stickers.filter(s => s.type === 'plain');
     const expressiveStickers = stickers.filter(s => s.type === 'expressive');
 
-    const renderGridSection = (title: string, stickerList: Sticker[], type: ExpressionType) => (
-        <div className="sticker-category">
-            <h3 className="sticker-category-header">{title}</h3>
-            <div className={`sticker-grid size-${gridSize}`}>
-                {stickerList.map(sticker => (
-                    <StickerItem 
-                        key={sticker.label}
-                        sticker={sticker} 
-                        originalFilename={originalFilename} 
-                        onRemove={onRemove} 
-                        onEdit={onEdit} 
-                        onRegenerate={onRegenerate} 
-                    />
-                ))}
-                <button className="add-sticker-btn" onClick={() => onAddClick(type)} aria-label={t('addExpressionButton')}>
-                    <AddIcon />
-                    <span>{t('addExpressionButton')}</span>
-                </button>
+    const renderGridSection = (title: string, stickerList: Sticker[], type: ExpressionType) => {
+        const buttonLabel = type === 'plain' ? t('addEmotionButton') : t('addExpressionButton');
+        return (
+            <div className="sticker-category">
+                <h3 className="sticker-category-header">{title}</h3>
+                <div className={`sticker-grid size-${gridSize}`}>
+                    {stickerList.map(sticker => (
+                        <StickerItem 
+                            key={sticker.label}
+                            sticker={sticker} 
+                            originalFilename={originalFilename} 
+                            onRemove={onRemove} 
+                            onEdit={onEdit} 
+                            onRegenerate={onRegenerate} 
+                        />
+                    ))}
+                    <button className="add-sticker-btn" onClick={() => onAddClick(type)} aria-label={buttonLabel}>
+                        <AddIcon />
+                        <span>{buttonLabel}</span>
+                    </button>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <section>
@@ -1219,7 +1243,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   const handleAddExpression = (newExpression: { emoji: string; label: string }, type: ExpressionType) => {
     if (!expressions.some(e => e.label.toLowerCase() === newExpression.label.toLowerCase())) {
-        const expressionToAdd: Expression = { ...newExpression, type, isDefault: false };
+        const finalEmoji = type === 'expressive' && !newExpression.emoji ? '💬' : newExpression.emoji;
+        const expressionToAdd: Expression = { ...newExpression, emoji: finalEmoji, type, isDefault: false };
         setExpressions(prev => [...prev, expressionToAdd]);
         setError(null);
     } else {
@@ -1467,6 +1492,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         )}
         {expressionTypeToAdd && (
             <AddExpressionModal
+                type={expressionTypeToAdd}
                 onAdd={(newExp) => handleAddExpression(newExp, expressionTypeToAdd)}
                 onClose={() => setExpressionTypeToAdd(null)}
             />
