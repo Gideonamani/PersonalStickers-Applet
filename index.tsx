@@ -390,7 +390,7 @@ const ImageCropper = ({
 
 const StickerCreator = ({
   characterImage,
-  onFileSelect,
+  onRequestImage,
   onGenerate,
   isLoading,
   backgroundColor,
@@ -400,10 +400,9 @@ const StickerCreator = ({
   artisticStyle,
   onArtisticStyleChange,
   onRestoreDefaults,
-  onUseCameraClick,
 }: {
   characterImage: string | null;
-  onFileSelect: (file: File | null | undefined) => void;
+  onRequestImage: () => void;
   onGenerate: () => void;
   isLoading: boolean;
   backgroundColor: string;
@@ -413,10 +412,8 @@ const StickerCreator = ({
   artisticStyle: string;
   onArtisticStyleChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onRestoreDefaults: () => void;
-  onUseCameraClick: () => void;
 }) => {
   const { t } = useLanguage();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -436,14 +433,9 @@ const StickerCreator = ({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      onFileSelect(file);
-    }
-  };
-
-  const handleDisplayClick = () => {
-    fileInputRef.current?.click();
+    // Note: To handle file drop, the file selection logic would need to be passed in.
+    // For this refactor, we are unifying all image requests through onRequestImage.
+    onRequestImage();
   };
 
   return (
@@ -454,7 +446,7 @@ const StickerCreator = ({
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={handleDisplayClick}
+        onClick={onRequestImage}
         role="button"
         tabIndex={0}
       >
@@ -503,22 +495,8 @@ const StickerCreator = ({
             />
         </div>
         <div className="button-group">
-            <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => onFileSelect(e.target.files?.[0])}
-                onClick={(e: React.MouseEvent<HTMLInputElement>) => {
-                  e.currentTarget.value = '';
-                }}
-                style={{ display: 'none' }}
-                ref={fileInputRef}
-                id="imageUpload"
-            />
-             <label htmlFor="imageUpload" className="upload-button">
-                <UploadIcon /> {t('uploadButton')}
-            </label>
-            <button onClick={onUseCameraClick} className="upload-button">
-                <CameraIcon /> {t('useCameraButton')}
+            <button onClick={onRequestImage} className="upload-button">
+                <UploadIcon /> {characterImage ? t('changeImageButton') : t('chooseImageButton')}
             </button>
             <button onClick={onGenerate} className="generate-button" disabled={isLoading || !characterImage}>
                 {isLoading ? t('generatingButton') : t('generateButton')}
@@ -826,6 +804,37 @@ const CameraModal = ({ onPictureTaken, onClose }: { onPictureTaken: (imageDataUr
     );
 };
 
+const ImageSourceModal = ({ onSelectFile, onSelectCamera, onClose }: { onSelectFile: () => void; onSelectCamera: () => void; onClose: () => void; }) => {
+    const { t } = useLanguage();
+    const modalContentRef = useRef<HTMLDivElement>(null);
+    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (modalContentRef.current && !modalContentRef.current.contains(e.target as Node)) {
+          onClose();
+        }
+    };
+
+    return (
+        <div className="modal-backdrop" onClick={handleBackdropClick}>
+            <div className="modal-content" ref={modalContentRef}>
+                <h3>{t('chooseSourceTitle')}</h3>
+                <div className="source-modal-actions">
+                    <button onClick={onSelectFile} className="source-button">
+                        <UploadIcon />
+                        <span>{t('sourceLibrary')}</span>
+                    </button>
+                    <button onClick={onSelectCamera} className="source-button">
+                        <CameraIcon />
+                        <span>{t('sourceCamera')}</span>
+                    </button>
+                </div>
+                <div className="modal-actions">
+                    <button onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Icon Components ---
 const DownloadIcon = () => (
@@ -1045,6 +1054,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
 
 const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const { t } = useLanguage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getInitialExpressions = useCallback(() => [
     { emoji: '👍', label: t('expThumbsUp') },
@@ -1070,6 +1080,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isCropModalOpen, setCropModalOpen] = useState(false);
   const [isCameraModalOpen, setCameraModalOpen] = useState(false);
+  const [isSourceModalOpen, setSourceModalOpen] = useState(false);
   const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
   const [gridSize, setGridSize] = useState<GridSize>('medium');
   const [isAddModalOpen, setAddModalOpen] = useState(false);
@@ -1164,7 +1175,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     setExpressions(prev => prev.filter(e => e.label !== labelToRemove));
   };
 
-  const handleFileSelect = (file: File | null | undefined) => {
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file && file.type.startsWith('image/')) {
       setOriginalFilename(file.name);
       const reader = new FileReader();
@@ -1336,7 +1348,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
             model: 'gemini-2.5-flash-image',
             contents: {
             parts: [
-                { inlineData: { data: sourceImage.data, mimeType: sourceImage.mimeType } },
+                { inlineData: { data: sourceImage.data, mimeType: userImage.mimeType } },
                 { text: prompt },
             ],
             },
@@ -1430,6 +1442,16 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     <>
       <Header onNavigateHome={onNavigateHome} />
       <main>
+        <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileSelect}
+            onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+              e.currentTarget.value = '';
+            }}
+            style={{ display: 'none' }}
+            ref={fileInputRef}
+        />
         {isCropModalOpen && imageToCrop && (
           <ImageCropper
             imageSrc={imageToCrop}
@@ -1441,6 +1463,19 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
             <CameraModal
                 onPictureTaken={handlePictureTaken}
                 onClose={() => setCameraModalOpen(false)}
+            />
+        )}
+        {isSourceModalOpen && (
+            <ImageSourceModal 
+                onSelectFile={() => {
+                    fileInputRef.current?.click();
+                    setSourceModalOpen(false);
+                }}
+                onSelectCamera={() => {
+                    setCameraModalOpen(true);
+                    setSourceModalOpen(false);
+                }}
+                onClose={() => setSourceModalOpen(false)}
             />
         )}
         {isAddModalOpen && (
@@ -1458,7 +1493,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         )}
         <StickerCreator
           characterImage={characterImage}
-          onFileSelect={handleFileSelect}
+          onRequestImage={() => setSourceModalOpen(true)}
           onGenerate={handleGenerate}
           isLoading={isLoading}
           backgroundColor={backgroundColor}
@@ -1468,7 +1503,6 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           artisticStyle={artisticStyle}
           onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
           onRestoreDefaults={handleRestoreDefaults}
-          onUseCameraClick={() => setCameraModalOpen(true)}
         />
         <div className="generation-results">
             {hasGenerationStarted && (

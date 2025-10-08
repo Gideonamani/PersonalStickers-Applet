@@ -337,6 +337,43 @@ main {
     gap: 1rem;
 }
 
+/* Image Source Modal */
+.source-modal-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.source-button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.source-button:hover {
+    background-color: #e9f2fd;
+    border-color: #4a90e2;
+    color: #4a90e2;
+}
+
+.source-button svg {
+    width: 32px;
+    height: 32px;
+}
+
+
 /* Add Expression Modal */
 .add-expression-modal-form {
     display: flex;
