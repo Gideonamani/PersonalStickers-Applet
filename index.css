@@ -593,6 +593,7 @@ main {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .generate-button, .upload-button, .restore-defaults-button {
@@ -608,6 +609,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.5rem;
 }
 
 .generate-button {
@@ -994,6 +996,122 @@ main {
     background-color: #94d3a2;
     cursor: not-allowed;
     box-shadow: none;
+}
+
+/* --- Camera Modal --- */
+.camera-modal {
+    background-color: white;
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    width: 95%;
+    max-width: 600px;
+    height: 90vh;
+    max-height: 800px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+.camera-modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+    text-align: center;
+}
+.camera-modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.camera-feed-container {
+    flex-grow: 1;
+    position: relative;
+    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.camera-feed, .camera-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.camera-feed.mirrored {
+    transform: scaleX(-1);
+}
+
+.camera-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+.camera-overlay svg {
+    width: 60%;
+    height: auto;
+    max-height: 80%;
+}
+
+.camera-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.capture-btn {
+    order: 2;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 5px solid white;
+    background-color: #f44336;
+    cursor: pointer;
+    box-shadow: 0 0 0 3px #f44336;
+    transition: background-color 0.2s;
+}
+.capture-btn:hover {
+    background-color: #d32f2f;
+}
+
+.switch-camera-btn {
+    order: 3;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid #ccc;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    color: #555;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.switch-camera-btn:hover {
+    background-color: #f0f0f0;
+    border-color: #999;
+}
+
+.camera-controls .modal-button.secondary {
+    order: 1;
 }
 
 /* Footer */

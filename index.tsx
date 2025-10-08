@@ -400,6 +400,7 @@ const StickerCreator = ({
   artisticStyle,
   onArtisticStyleChange,
   onRestoreDefaults,
+  onUseCameraClick,
 }: {
   characterImage: string | null;
   onFileSelect: (file: File | null | undefined) => void;
@@ -412,6 +413,7 @@ const StickerCreator = ({
   artisticStyle: string;
   onArtisticStyleChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onRestoreDefaults: () => void;
+  onUseCameraClick: () => void;
 }) => {
   const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -513,8 +515,11 @@ const StickerCreator = ({
                 id="imageUpload"
             />
              <label htmlFor="imageUpload" className="upload-button">
-                {t('uploadButton')}
+                <UploadIcon /> {t('uploadButton')}
             </label>
+            <button onClick={onUseCameraClick} className="upload-button">
+                <CameraIcon /> {t('useCameraButton')}
+            </button>
             <button onClick={onGenerate} className="generate-button" disabled={isLoading || !characterImage}>
                 {isLoading ? t('generatingButton') : t('generateButton')}
             </button>
@@ -692,6 +697,135 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
     );
 };
 
+const CameraModal = ({ onPictureTaken, onClose }: { onPictureTaken: (imageDataUrl: string) => void; onClose: () => void; }) => {
+    const { t } = useLanguage();
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+
+    const [capturedImage, setCapturedImage] = useState<string | null>(null);
+    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+    const [error, setError] = useState<string | null>(null);
+
+    const stopStream = useCallback(() => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+    }, []);
+    
+    const startStream = useCallback(async () => {
+        stopStream();
+        setCapturedImage(null);
+        setError(null);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+            streamRef.current = stream;
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+        } catch (err) {
+            console.error("Error accessing camera:", err);
+            setError(t('errorCamera'));
+        }
+    }, [facingMode, stopStream, t]);
+
+    useEffect(() => {
+        startStream();
+        return stopStream;
+    }, [startStream, stopStream]);
+
+    const handleTakePicture = () => {
+        if (videoRef.current && canvasRef.current) {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            if (context) {
+                if (facingMode === 'user') {
+                    context.translate(canvas.width, 0);
+                    context.scale(-1, 1);
+                }
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL('image/png');
+                setCapturedImage(dataUrl);
+                stopStream();
+            }
+        }
+    };
+
+    const handleSwitchCamera = () => {
+        setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+    };
+
+    const handleRetake = () => {
+        startStream();
+    };
+
+    const handleUsePicture = () => {
+        if (capturedImage) {
+            onPictureTaken(capturedImage);
+        }
+    };
+    
+    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.target === e.currentTarget) {
+            onClose();
+        }
+    };
+
+    return (
+        <div className="modal-backdrop" onClick={handleBackdropClick}>
+            <div className="camera-modal">
+                <div className="camera-modal-header">
+                    <h3>{t('cameraModalTitle')}</h3>
+                </div>
+                <div className="camera-feed-container">
+                    {error && <p className="error-message">{error}</p>}
+                    {!error && (
+                        <>
+                            {capturedImage ? (
+                                <img src={capturedImage} alt="Captured preview" className="camera-preview" />
+                            ) : (
+                                <>
+                                    <video ref={videoRef} autoPlay playsInline className={`camera-feed ${facingMode === 'user' ? 'mirrored' : ''}`}></video>
+                                    <div className="camera-overlay">
+                                        <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                                            <defs>
+                                                <mask id="selfieMask">
+                                                    <rect width="100" height="100" fill="white" />
+                                                    <ellipse cx="50" cy="50" rx="35" ry="45" fill="black" />
+                                                </mask>
+                                            </defs>
+                                            <rect width="100" height="100" fill="rgba(0,0,0,0.5)" mask="url(#selfieMask)" />
+                                        </svg>
+                                    </div>
+                                </>
+                            )}
+                        </>
+                    )}
+                     <canvas ref={canvasRef} style={{ display: 'none' }}></canvas>
+                </div>
+                <div className="camera-controls">
+                    {capturedImage ? (
+                        <>
+                            <button onClick={handleRetake} className="modal-button secondary">{t('retakeButton')}</button>
+                            <button onClick={handleUsePicture} className="modal-button primary">{t('usePictureButton')}</button>
+                        </>
+                    ) : (
+                        <>
+                            <button onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
+                            <button onClick={handleTakePicture} className="capture-btn" title={t('takePictureButton')}></button>
+                            <button onClick={handleSwitchCamera} className="switch-camera-btn" title={t('switchCameraButton')}><CameraSwitchIcon /></button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Icon Components ---
 const DownloadIcon = () => (
@@ -724,6 +858,27 @@ const RefreshIcon = () => (
 const AddIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 16 16">
         <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+    </svg>
+);
+
+const CameraIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.827 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4z"/>
+        <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5m0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0"/>
+    </svg>
+);
+
+const UploadIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+        <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
+    </svg>
+);
+
+const CameraSwitchIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M11.5 5.036a.5.5 0 0 1 .5.5v5.928a.5.5 0 0 1-1 0V5.536a.5.5 0 0 1 .5-.5m-4.436.035a.5.5 0 0 1 .5.5v6.928a.5.5 0 0 1-1 0V5.57a.5.5 0 0 1 .5-.5z"/>
+        <path d="M9.646 3.146a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L11.293 5.5 9.646 3.854a.5.5 0 0 1 0-.708m-5.023 6.708a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L6.293 12.5l-1.647-1.646a.5.5 0 0 1 0-.708M2 5.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0m0 1a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0"/>
     </svg>
 );
 
@@ -914,6 +1069,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [transparentBackground, setTransparentBackground] = useState(true);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isCropModalOpen, setCropModalOpen] = useState(false);
+  const [isCameraModalOpen, setCameraModalOpen] = useState(false);
   const [artisticStyle, setArtisticStyle] = useState('Photo-realistic');
   const [gridSize, setGridSize] = useState<GridSize>('medium');
   const [isAddModalOpen, setAddModalOpen] = useState(false);
@@ -1020,6 +1176,13 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     } else if (file) {
       setError(t('errorInvalidFile'));
     }
+  };
+
+  const handlePictureTaken = (imageDataUrl: string) => {
+    setCameraModalOpen(false);
+    setOriginalFilename(`sticker-me-shot-${Date.now()}.png`);
+    setImageToCrop(imageDataUrl);
+    setCropModalOpen(true);
   };
 
   const handleCropSave = (croppedImageDataUrl: string) => {
@@ -1274,6 +1437,12 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
             onCancel={handleCropCancel}
           />
         )}
+        {isCameraModalOpen && (
+            <CameraModal
+                onPictureTaken={handlePictureTaken}
+                onClose={() => setCameraModalOpen(false)}
+            />
+        )}
         {isAddModalOpen && (
             <AddExpressionModal
                 onAdd={handleAddExpression}
@@ -1299,6 +1468,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           artisticStyle={artisticStyle}
           onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
           onRestoreDefaults={handleRestoreDefaults}
+          onUseCameraClick={() => setCameraModalOpen(true)}
         />
         <div className="generation-results">
             {hasGenerationStarted && (
