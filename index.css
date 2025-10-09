@@ -229,11 +229,18 @@ main {
     line-height: 1.5;
 }
 
+.carousel-controls-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    margin-top: 2.5rem;
+}
+
 .carousel-markers {
     display: flex;
     justify-content: center;
     gap: 1rem;
-    margin-top: 2.5rem;
 }
 
 .carousel-markers .marker {
@@ -254,6 +261,30 @@ main {
 .carousel-markers .marker.active {
     background-color: #4a90e2;
     transform: scale(1.2);
+}
+
+.play-pause-btn {
+    background: none;
+    border: 2px solid #d1d9e2;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    color: #a8b5c5;
+    transition: all 0.3s ease;
+}
+
+.play-pause-btn:hover {
+    border-color: #4a90e2;
+    color: #4a90e2;
+}
+
+.play-pause-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .features ul {

@@ -920,6 +920,18 @@ const CameraSwitchIcon = () => (
     </svg>
 );
 
+const PauseIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M6 3.5a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5zm4 0a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5z"/>
+    </svg>
+);
+
+const PlayIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+    </svg>
+);
+
 
 const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
     const { t } = useLanguage();
@@ -1058,6 +1070,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const [activeStep, setActiveStep] = useState(0);
     const intervalRef = useRef<number | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+    const [isManuallyPaused, setIsManuallyPaused] = useState(false);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -1084,13 +1097,35 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     }, [stepsData.length]);
 
     useEffect(() => {
-        startAutoScroll();
+        if (!isManuallyPaused) {
+            startAutoScroll();
+        } else {
+            stopAutoScroll();
+        }
         return () => stopAutoScroll();
-    }, [startAutoScroll]);
+    }, [startAutoScroll, isManuallyPaused]);
 
     const handleMarkerClick = (index: number) => {
         setActiveStep(index);
-        startAutoScroll(); // Reset the timer when user interacts
+        if (!isManuallyPaused) {
+            startAutoScroll(); // Reset the timer when user interacts
+        }
+    };
+    
+    const handleTogglePause = () => {
+        setIsManuallyPaused(prev => !prev);
+    };
+    
+    const handleMouseEnter = () => {
+        if (!isManuallyPaused) {
+            stopAutoScroll();
+        }
+    };
+    
+    const handleMouseLeave = () => {
+        if (!isManuallyPaused) {
+            startAutoScroll();
+        }
     };
 
     const transformStyle = isMobile ? { transform: `translateX(-${activeStep * 100}%)` } : {};
@@ -1115,8 +1150,8 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                 <h2>{t('howItWorksTitle')}</h2>
                 <div
                     className="carousel-wrapper"
-                    onMouseEnter={stopAutoScroll}
-                    onMouseLeave={startAutoScroll}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
                 >
                     <div className="steps-container" style={transformStyle}>
                         {stepsData.map((step, index) => (
@@ -1127,15 +1162,24 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                             </div>
                         ))}
                     </div>
-                    <div className="carousel-markers">
-                        {stepsData.map((_, index) => (
-                            <button
-                                key={index}
-                                className={`marker ${index === activeStep ? 'active' : ''}`}
-                                onClick={() => handleMarkerClick(index)}
-                                aria-label={`Go to step ${index + 1}`}
-                            />
-                        ))}
+                    <div className="carousel-controls-container">
+                        <div className="carousel-markers">
+                            {stepsData.map((_, index) => (
+                                <button
+                                    key={index}
+                                    className={`marker ${index === activeStep ? 'active' : ''}`}
+                                    onClick={() => handleMarkerClick(index)}
+                                    aria-label={`Go to step ${index + 1}`}
+                                />
+                            ))}
+                        </div>
+                        <button 
+                            className="play-pause-btn"
+                            onClick={handleTogglePause}
+                            aria-label={isManuallyPaused ? "Play carousel" : "Pause carousel"}
+                        >
+                            {isManuallyPaused ? <PlayIcon /> : <PauseIcon />}
+                        </button>
                     </div>
                 </div>
             </section>
