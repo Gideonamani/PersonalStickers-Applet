@@ -8,11 +8,19 @@ import { GoogleGenAI, Modality } from '@google/genai';
 import JSZip from 'jszip';
 import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
 
+import { 
+    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize 
+} from './types';
+import { 
+    DownloadIcon, BinIcon, EditIcon, RefreshIcon, AddIcon, CameraIcon, 
+    UploadIcon, CameraSwitchIcon, PauseIcon, PlayIcon
+} from './components/Icons';
+import { makeBackgroundTransparent } from './utils/transparency';
+import { generatePrompt } from './utils/prompt-generator';
+
 import './index.css';
 
 // --- Localization ---
-type Language = 'sw' | 'en';
-
 interface LanguageContextType {
     language: Language;
     setLanguage: (language: Language) => void;
@@ -82,30 +90,6 @@ const POPULAR_EMOJIS = [
     '😲', '😳', '😨', '😥', '👍', '👎', '👌', '✌️', '👏', '🙏'
 ];
 
-
-type StickerStatus = 'idle' | 'loading' | 'done' | 'error';
-type ExpressionType = 'plain' | 'expressive';
-
-type Expression = {
-    emoji: string;
-    label: string; // For default: translation key. For custom: literal text.
-    type: ExpressionType;
-    isDefault: boolean;
-};
-type Sticker = Expression & {
-    imageUrl: string | null; // The final image to display/download
-    originalImageUrl: string | null; // The raw image from the AI, for reprocessing
-    status: StickerStatus;
-};
-
-type TransparencyOptions = {
-    colorTol: number;
-    tileGuess: number;
-    gradKeep: number;
-    feather: number;
-};
-
-
 // --- Helper Functions ---
 const dataUrlToBase64 = (dataUrl: string) => dataUrl.split(',')[1];
 
@@ -116,163 +100,6 @@ const downloadImage = (imageUrl: string, filename: string) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-};
-
-const makeBackgroundTransparent = (imageUrl: string, opts: Partial<TransparencyOptions> = {}): Promise<string> => {
-    return new Promise(async (resolve) => {
-        try {
-            const {
-                colorTol = 10,
-                tileGuess = 16,
-                gradKeep = 10,
-                feather = 2
-            } = opts;
-
-            const img = await new Promise<HTMLImageElement>((res, rej) => {
-                const im = new Image();
-                im.crossOrigin = 'anonymous';
-                im.onload = () => res(im);
-                im.onerror = () => rej(new Error('Image failed to load'));
-                im.src = imageUrl;
-            });
-
-            const canvas = document.createElement('canvas');
-            const W = canvas.width = img.width; 
-            const H = canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Could not get canvas context');
-            ctx.drawImage(img, 0, 0);
-            
-            const imgData = ctx.getImageData(0, 0, W, H);
-            const d = imgData.data;
-            const rgb2lab = (r: number, g: number, b: number): number[] => {
-                const srgb = [r / 255, g / 255, b / 255].map(u =>
-                    u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4)
-                );
-                const [R, G, B] = srgb;
-                const X = 0.4124564 * R + 0.3575761 * G + 0.1804375 * B;
-                const Y = 0.2126729 * R + 0.7151522 * G + 0.0721750 * B;
-                const Z = 0.0193339 * R + 0.1191920 * G + 0.9503041 * B;
-                const xn = 0.95047, yn = 1.00000, zn = 1.08883;
-                const f = (t: number) => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
-                const fx = f(X / xn), fy = f(Y / yn), fz = f(Z / zn);
-                return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
-            };
-            const distLab = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-            const medianColor = (samples: number[][]): number[] => {
-                const rs = samples.map(p => p[0]).sort((a, b) => a - b);
-                const gs = samples.map(p => p[1]).sort((a, b) => a - b);
-                const bs = samples.map(p => p[2]).sort((a, b) => a - b);
-                return [rs[(rs.length / 2) | 0], gs[(gs.length / 2) | 0], bs[(bs.length / 2) | 0]];
-            }
-            const pickPatch = (x0: number, y0: number, sz = 24): number[][] => {
-                const arr: number[][] = [];
-                for (let y = y0; y < y0 + sz; y++) {
-                    for (let x = x0; x < x0 + sz; x++) {
-                        const i = (y * W + x) * 4; arr.push([d[i], d[i + 1], d[i + 2]]);
-                    }
-                } return arr;
-            }
-            const corners = [
-                ...pickPatch(0, 0), ...pickPatch(W - 24, 0),
-                ...pickPatch(0, H - 24), ...pickPatch(W - 24, H - 24)
-            ];
-            const Ls = corners.map(([r, g, b]) => rgb2lab(r, g, b)[0]);
-            const Lmed = Ls.slice().sort((a, b) => a - b)[(Ls.length / 2) | 0];
-            const light: number[][] = [], dark: number[][] = [];
-            corners.forEach((rgb, i) => (Ls[i] >= Lmed ? light : dark).push(rgb));
-            const c1 = medianColor(light);
-            const c2 = medianColor(dark);
-            const c1Lab = rgb2lab(c1[0], c1[1], c1[2]), c2Lab = rgb2lab(c2[0], c2[1], c2[2]);
-            const scorePeriod = (p: number): number => {
-                let score = 0, step = Math.max(1, Math.floor(W / 64));
-                for (let y = 0; y < H; y += step) {
-                    for (let x = 0; x < W; x += step) {
-                        const i = (y * W + x) * 4; const lab = rgb2lab(d[i], d[i + 1], d[i + 2]);
-                        const parity = ((Math.floor(x / p) + Math.floor(y / p)) & 1);
-                        const dc1 = distLab(lab, c1Lab), dc2 = distLab(lab, c2Lab);
-                        const match = (parity ? dc2 < dc1 : dc1 < dc2);
-                        if (Math.min(dc1, dc2) < colorTol && match) score++;
-                    }
-                }
-                return score;
-            }
-            let bestP = tileGuess, bestS = -1;
-            for (let p = Math.max(8, tileGuess - 6); p <= tileGuess + 6; p++) {
-                const s = scorePeriod(p); if (s > bestS) { bestS = s; bestP = p; }
-            }
-            const P = bestP;
-            const grad = new Float32Array(W * H);
-            const get = (x: number, y: number, c: number) => d[(y * W + x) * 4 + c];
-            for (let y = 1; y < H - 1; y++) {
-                for (let x = 1; x < W - 1; x++) {
-                    const lum = (xx: number, yy: number) => 0.2126 * get(xx, yy, 0) + 0.7152 * get(xx, yy, 1) + 0.0722 * get(xx, yy, 2);
-                    const gx = -lum(x - 1, y - 1) - 2 * lum(x - 1, y) - lum(x - 1, y + 1)
-                        + lum(x + 1, y - 1) + 2 * lum(x + 1, y) + lum(x + 1, y + 1);
-                    const gy = -lum(x - 1, y - 1) - 2 * lum(x, y - 1) - lum(x + 1, y - 1)
-                        + lum(x - 1, y + 1) + 2 * lum(x, y + 1) + lum(x + 1, y + 1);
-                    grad[y * W + x] = Math.hypot(gx, gy) / 8;
-                }
-            }
-            const like = new Float32Array(W * H);
-            for (let y = 0; y < H; y++) {
-                for (let x = 0; x < W; x++) {
-                    const i = (y * W + x) * 4;
-                    const lab = rgb2lab(d[i], d[i + 1], d[i + 2]);
-                    const dc1 = distLab(lab, c1Lab), dc2 = distLab(lab, c2Lab);
-                    const parity = ((Math.floor(x / P) + Math.floor(y / P)) & 1);
-                    const dc = parity ? dc2 : dc1;
-                    let L = Math.max(0, 1 - dc / colorTol);
-                    const g = grad[y * W + x];
-                    if (g > gradKeep) L *= 0.2;
-                    like[y * W + x] = L;
-                }
-            }
-            const qx = new Int32Array(W * H), qy = new Int32Array(W * H);
-            const seen = new Uint8Array(W * H);
-            let qh = 0, qt = 0;
-            const push = (x: number, y: number) => { const k = y * W + x; if (seen[k]) return; seen[k] = 1; qx[qt] = x; qy[qt] = y; qt++; }
-            for (let x = 0; x < W; x++) { if (like[x] > .5) push(x, 0); if (like[(H - 1) * W + x] > .5) push(x, H - 1); }
-            for (let y = 0; y < H; y++) { if (like[y * W] > .5) push(0, y); if (like[y * W + W - 1] > .5) push(W - 1, y); }
-            while (qh < qt) {
-                const x = qx[qh], y = qy[qh]; qh++;
-                like[y * W + x] = 1.0;
-                [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
-                    const nx = x + dx, ny = y + dy;
-                    if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
-                        const k = ny * W + nx;
-                        if (!seen[k] && like[k] > .5) push(nx, ny);
-                    }
-                });
-            }
-            const mask = new Float32Array(W * H);
-            for (let i = 0; i < W * H; i++) mask[i] = like[i] >= 1.0 ? 1 : 0;
-            if (feather > 0) {
-                const r = Math.max(1, Math.floor(feather));
-                const tmp = new Float32Array(W * H);
-                for (let y = 0; y < H; y++) {
-                    for (let x = 0; x < W; x++) {
-                        let sum = 0, cnt = 0;
-                        for (let yy = y - r; yy <= y + r; yy++) {
-                            for (let xx = x - r; xx <= x + r; xx++) {
-                                if (xx >= 0 && xx < W && yy >= 0 && yy < H) { sum += mask[yy * W + xx]; cnt++; }
-                            }
-                        }
-                        tmp[y * W + x] = sum / cnt;
-                    }
-                }
-                mask.set(tmp);
-            }
-            for (let i = 0; i < W * H; i++) {
-                d[i * 4 + 3] = Math.round((1 - mask[i]) * 255);
-            }
-            ctx.putImageData(imgData, 0, 0);
-            resolve(canvas.toDataURL('image/png'));
-        } catch (error) {
-            console.error('Error processing image for transparency:', error);
-            resolve(imageUrl);
-        }
-    });
 };
 
 // --- React Components ---
@@ -863,76 +690,6 @@ const ImageSourceModal = ({ onSelectFile, onSelectCamera, onClose }: { onSelectF
     );
 };
 
-
-// --- Icon Components ---
-const DownloadIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-  </svg>
-);
-
-const BinIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
-        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
-    </svg>
-);
-
-const EditIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/>
-    </svg>
-);
-
-const RefreshIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
-        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
-    </svg>
-);
-
-const AddIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
-    </svg>
-);
-
-const CameraIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.827 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828-.828A2 2 0 0 1 3.172 4z"/>
-        <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5m0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0"/>
-    </svg>
-);
-
-const UploadIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
-        <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
-    </svg>
-);
-
-const CameraSwitchIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512" fill="currentColor">
-        <path d="M307.81,212.18c-3.24,0-6.07-2.17-6.91-5.3l-4.82-17.88c-0.84-3.12-3.68-5.3-6.91-5.3h-21.46h-25.44H220.8     c-3.24,0-6.07-2.17-6.91,5.3l-4.82,17.88c-0.84-3.12-3.68-5.3-6.91-5.3H169.5c-3.96,0-7.16,3.21-7.16,7.16v101.78     c0,3.96,3.21,7.16,7.16,7.16h170.95c3.96,0,7.16,3.21,7.16,7.16V219.35c0-3.96-3.21-7.16-7.16-7.16H307.81z M282.33,264.94     c-0.86,13.64-11.93,24.71-25.58,25.58c-16.54,1.05-30.18-12.59-29.14-29.14c0.86-13.64,11.93-24.71,25.58-25.58     C269.74,234.76,283.38,248.4,282.33,264.94z"/>
-        <path d="M82.95,272.41c3.82,0,7.53-1.53,10.23-4.23l21.23-21.23c4.74-4.74,6.4-11.92,3.73-18.06     c-2.73-6.29-8.88-8.95-18.84-7.57l-0.27,0.27c15.78-71.56,79.7-125.27,155.94-125.27c60.72,0,115.41,33.72,142.73,87.99     c3.58,7.11,12.24,9.97,19.34,6.39c7.11-3.58,9.97-12.24,6.39-19.34c-15.47-30.73-39.05-56.66-68.22-75.01     C325.23,77.47,290.57,67.5,254.98,67.5c-93,0-170.48,67.71-185.75,156.41c-5.38-4.77-13.59-5.18-19.13-0.44     c-6.3,5.39-6.75,14.88-1.13,20.84c0.23,0.24,5.69,6.03,11.41,11.93c3.41,3.51,6.2,6.33,8.3,8.38c4.23,4.13,7.88,7.69,14.07,7.78     C82.81,272.41,82.88,272.41,82.95,272.41z"/>
-        <path d="M464.28,247.82l-26.5-26.5c-2.75-2.75-6.57-4.3-10.44-4.23c-2.33,0.03-4.29,0.56-6.07,1.42     c-0.26,0.12-0.51,0.26-0.76,0.4c-0.04,0.02-0.08,0.04-0.12,0.06c-0.59,0.33-1.16,0.68-1.69,1.08c-1.88,1.34-3.6,3.03-5.44,4.82     c-2.1,2.05-4.89,4.87-8.3,8.38c-5.72,5.9-11.18,11.68-11.41,11.93c-5.46,5.79-5.19,14.91,0.6,20.36     c5.75,5.42,14.77,5.18,20.24-0.48c-4.72,83.85-74.42,150.62-159.43,150.62c-70.52,0-131.86-45.23-152.62-112.55     c-2.35-7.6-10.41-11.86-18.01-9.52c-7.6,2.34-11.86,10.41-9.52,18.01c11.62,37.68,35.48,71.52,67.19,95.28     c32.8,24.59,71.86,37.58,112.96,37.58c100.11,0,182.23-78.45,188.14-177.1l0.79,0.79c2.81,2.81,6.5,4.22,10.18,4.22     c3.69,0,7.37-1.41,10.18-4.22     C469.91,262.57,469.91,253.45,464.28,247.82z"/>
-    </svg>
-);
-
-const PauseIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M6 3.5a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5zm4 0a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5z"/>
-    </svg>
-);
-
-const PlayIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-        <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
-    </svg>
-);
-
-
 const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
     const { t } = useLanguage();
     const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
@@ -1017,8 +774,6 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
     </div>
     );
 };
-
-type GridSize = 'small' | 'medium' | 'large';
 
 const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: (type: ExpressionType) => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => {
     const { t } = useLanguage();
@@ -1394,35 +1149,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
     
-    const backgroundInstruction = transparentBackground
-      ? 'a transparent background. The output image must be a PNG with a true alpha channel, not a rendered checkerboard pattern representing transparency.'
-      : `a solid, opaque background of the hex color ${backgroundColor}`;
-
-    let styleInstruction = '';
-    switch (artisticStyle) {
-        case 'Anime': styleInstruction = 'a vibrant Anime/Manga style'; break;
-        case '3D Render': styleInstruction = 'a polished 3D render style, similar to modern animated films'; break;
-        case 'Photo-realistic': default: styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph'; break;
-    }
-
-    let specificInstruction = '';
-    if (expression.type === 'plain') {
-        specificInstruction = 'Create a clean, simple, close-up sticker focusing on the facial expression of the character. The character should be shown from the chest up.';
-    } else { // expressive
-        specificInstruction = 'Create a high-energy, meme-style sticker. The character can have exaggerated features or be in a more dynamic pose to match the phrase. Feel free to add subtle, non-distracting graphic elements like motion lines or sparkles if it enhances the expression.';
-    }
-    
-    const getEnglishLabel = (exp: Expression) => {
-        if (!exp.isDefault) {
-            return exp.label; // Custom labels are literal strings
-        }
-        // For default expressions, get the English translation from the key
-        return translations?.en?.[exp.label] || exp.label; // Fallback to key if not found
-    };
-    const englishLabel = getEnglishLabel(expression);
-
     try {
-        const prompt = `Generate a high-quality sticker of the character showing a "${englishLabel}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+        const prompt = generatePrompt(expression, artisticStyle, transparentBackground, backgroundColor, translations);
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
