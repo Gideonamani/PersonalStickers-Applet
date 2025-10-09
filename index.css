@@ -180,9 +180,13 @@ main {
     margin-bottom: 2.5rem;
 }
 
+.carousel-wrapper {
+    /* Semantic container for the carousel elements */
+}
+
 .steps-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 2rem;
 }
 
@@ -191,6 +195,14 @@ main {
     padding: 2rem;
     border-radius: 8px;
     text-align: center;
+    border: 2px solid transparent;
+    transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+.step-card.active {
+    transform: translateY(-10px) scale(1.03);
+    box-shadow: 0 10px 20px rgba(74, 144, 226, 0.25);
+    border-color: #a0c7f1;
 }
 
 .step-icon {
@@ -215,6 +227,33 @@ main {
 .step-card p {
     color: #666;
     line-height: 1.5;
+}
+
+.carousel-markers {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2.5rem;
+}
+
+.carousel-markers .marker {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #d1d9e2;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.carousel-markers .marker:hover {
+    background-color: #a8b5c5;
+}
+
+.carousel-markers .marker.active {
+    background-color: #4a90e2;
+    transform: scale(1.2);
 }
 
 .features ul {
@@ -1211,5 +1250,29 @@ main {
         flex-direction: row;
         align-items: center;
         gap: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .carousel-wrapper {
+        overflow: hidden; /* Hide the other step cards */
+    }
+
+    .steps-container {
+        display: flex; /* Switch to flexbox for sliding */
+        transition: transform 0.4s ease-in-out; /* Animate the slide */
+        gap: 0; /* Remove gap for seamless sliding */
+    }
+    
+    .step-card {
+        width: 100%;
+        flex-shrink: 0; /* Prevent cards from shrinking */
+    }
+
+    /* Override the active state transform on mobile, as it's the only one visible */
+    .step-card.active {
+        transform: none; 
+        box-shadow: none;
+        border-color: transparent;
     }
 }
