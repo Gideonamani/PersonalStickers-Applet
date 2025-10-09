@@ -1267,6 +1267,7 @@ main {
     .step-card {
         width: 100%;
         flex-shrink: 0; /* Prevent cards from shrinking */
+        box-sizing: border-box; /* Contain padding within the width */
     }
 
     /* Override the active state transform on mobile, as it's the only one visible */

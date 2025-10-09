@@ -1080,7 +1080,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
         stopAutoScroll();
         intervalRef.current = setInterval(() => {
             setActiveStep(prev => (prev + 1) % stepsData.length);
-        }, 1000); // 1 second per step
+        }, 2000); // 2 seconds per step
     }, [stepsData.length]);
 
     useEffect(() => {
@@ -1113,7 +1113,11 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
 
             <section className="how-it-works">
                 <h2>{t('howItWorksTitle')}</h2>
-                <div className="carousel-wrapper">
+                <div
+                    className="carousel-wrapper"
+                    onMouseEnter={stopAutoScroll}
+                    onMouseLeave={startAutoScroll}
+                >
                     <div className="steps-container" style={transformStyle}>
                         {stepsData.map((step, index) => (
                             <div key={step.title} className={`step-card ${index === activeStep ? 'active' : ''}`}>
