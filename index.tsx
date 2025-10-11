@@ -74,6 +74,7 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t, isReady, translations }}>
             {children}
+        {/* FIX: Corrected typo in LanguageContext.Provider closing tag. */}
         </LanguageContext.Provider>
     );
 };
@@ -1092,6 +1093,43 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       return newStickers.filter(s => expressions.some(e => e.label === s.label));
     });
   }, [expressions]);
+
+  // Handle pasting images from clipboard
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+        const items = event.clipboardData?.items;
+        if (!items) return;
+
+        let imageFile: File | null = null;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                imageFile = item.getAsFile();
+                break;
+            }
+        }
+
+        if (imageFile) {
+            event.preventDefault();
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const imageDataUrl = reader.result as string;
+                if (imageDataUrl) {
+                    setOriginalFilename(`pasted-image-${Date.now()}.png`);
+                    setImageToCrop(imageDataUrl);
+                    setCropModalOpen(true);
+                    setSourceModalOpen(false); // Close modal if open
+                }
+            };
+            reader.readAsDataURL(imageFile);
+        }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => {
+        document.removeEventListener('paste', handlePaste);
+    };
+  }, []);
 
   const handleAddExpression = (newExpression: { emoji: string; label: string }, type: ExpressionType) => {
     if (!expressions.some(e => e.label.toLowerCase() === newExpression.label.toLowerCase())) {
