@@ -17,6 +17,7 @@ import {
 } from './components/Icons';
 import { makeBackgroundTransparent } from './utils/transparency';
 import { generatePrompt } from './utils/prompt-generator';
+import { SAMPLE_IMAGE_DATA_URL } from './sample-data';
 
 import './index.css';
 
@@ -835,7 +836,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     }, []);
 
     const stepsData = [
-        { title: 'step1Title', p: 'step1P' },
+        { title: 'step1Title', p: 'step1P', image: SAMPLE_IMAGE_DATA_URL },
         { title: 'step2Title', p: 'step2P' },
         { title: 'step3Title', p: 'step3P' },
         { title: 'step4Title', p: 'step4P' },
@@ -895,11 +896,18 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
             </header>
             <main className="explainer-content">
             <section className="explainer-intro">
-                <h2>{t('explainerIntroTitle')}</h2>
-                <p>{t('explainerIntroP')}</p>
-                <button className="get-started-btn" onClick={onNavigate}>
-                {t('getStartedButton')}
-                </button>
+                <div className="intro-content-wrapper">
+                    <div className="intro-text">
+                        <h2>{t('explainerIntroTitle')}</h2>
+                        <p>{t('explainerIntroP')}</p>
+                        <button className="get-started-btn" onClick={onNavigate}>
+                            {t('getStartedButton')}
+                        </button>
+                    </div>
+                    <div className="intro-image-container">
+                        <img src={SAMPLE_IMAGE_DATA_URL} alt={t('explainerIntroTitle')} className="hero-image-preview" />
+                    </div>
+                </div>
             </section>
 
             <section className="how-it-works">
@@ -914,6 +922,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                             <div key={step.title} className={`step-card ${index === activeStep ? 'active' : ''}`}>
                                 <div className="step-icon">{index + 1}</div>
                                 <h3>{t(step.title)}</h3>
+                                {step.image && <img src={step.image} alt={t(step.title)} className="step-image-preview" />}
                                 <p>{t(step.p)}</p>
                             </div>
                         ))}

@@ -132,13 +132,41 @@ main {
 }
 
 .explainer-intro {
-    text-align: center;
-    padding: 2rem 0;
+    padding: 4rem 0;
     border-bottom: 1px solid #e0e0e0;
 }
 
+.intro-content-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+}
+
+.intro-text {
+    flex: 1;
+    max-width: 55%;
+}
+
+.intro-image-container {
+    flex: 1;
+    max-width: 45%;
+    text-align: center;
+}
+
+.hero-image-preview {
+    max-width: 100%;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(74, 144, 226, 0.3);
+    transform: rotate(2deg);
+    transition: transform 0.3s ease-in-out;
+}
+
+.intro-image-container:hover .hero-image-preview {
+    transform: rotate(0) scale(1.03);
+}
+
 .explainer-intro h2 {
-    font-size: 1.8rem;
+    font-size: 2.5rem;
     color: #333;
     margin-bottom: 1rem;
 }
@@ -148,7 +176,7 @@ main {
     color: #555;
     line-height: 1.6;
     max-width: 700px;
-    margin: 0 auto 2rem auto;
+    margin: 0 0 2rem 0;
 }
 
 .get-started-btn {
@@ -217,6 +245,14 @@ main {
     font-size: 1.5rem;
     font-weight: bold;
     margin: 0 auto 1rem auto;
+}
+
+.step-image-preview {
+    max-width: 80%;
+    height: auto;
+    border-radius: 8px;
+    margin: 1rem auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .step-card h3 {
@@ -1281,6 +1317,35 @@ main {
         flex-direction: row;
         align-items: center;
         gap: 1.5rem;
+    }
+}
+
+@media (max-width: 860px) {
+    .intro-content-wrapper {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .intro-text, .intro-image-container {
+        max-width: 100%;
+        text-align: center;
+    }
+    
+    .explainer-intro h2, .explainer-intro p {
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .explainer-intro p {
+        margin-bottom: 2rem;
+    }
+
+    .intro-image-container {
+        margin-top: 3rem;
+    }
+
+    .hero-image-preview {
+        transform: rotate(0);
     }
 }
 
