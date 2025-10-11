@@ -823,7 +823,8 @@ const Footer = () => (
 const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const { t } = useLanguage();
     const [activeStep, setActiveStep] = useState(0);
-    const intervalRef = useRef<number | null>(null);
+    // Fix: Use ReturnType<typeof setInterval> to correctly type the ref for both browser (number) and Node.js (Timeout) environments.
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
     const [isManuallyPaused, setIsManuallyPaused] = useState(false);
 
