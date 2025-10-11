@@ -17,7 +17,7 @@ import {
 } from './components/Icons';
 import { makeBackgroundTransparent } from './utils/transparency';
 import { generatePrompt } from './utils/prompt-generator';
-import { SAMPLE_IMAGE_DATA_URL } from './sample-data';
+import { Numbuh4 } from './sample-image-data';
 
 import './index.css';
 
@@ -837,7 +837,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     }, []);
 
     const stepsData = [
-        { title: 'step1Title', p: 'step1P', image: SAMPLE_IMAGE_DATA_URL },
+        { title: 'step1Title', p: 'step1P', image: Numbuh4 },
         { title: 'step2Title', p: 'step2P' },
         { title: 'step3Title', p: 'step3P' },
         { title: 'step4Title', p: 'step4P' },
@@ -906,7 +906,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                         </button>
                     </div>
                     <div className="intro-image-container">
-                        <img src={SAMPLE_IMAGE_DATA_URL} alt={t('explainerIntroTitle')} className="hero-image-preview" />
+                        <img src={Numbuh4} alt={t('explainerIntroTitle')} className="hero-image-preview" />
                     </div>
                 </div>
             </section>
