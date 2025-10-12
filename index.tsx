@@ -232,6 +232,8 @@ const StickerCreator = ({
   onBackgroundColorChange,
   transparentBackground,
   onTransparentChange,
+  removeBackgroundClientSide,
+  onRemoveBackgroundClientSideChange,
   artisticStyle,
   onArtisticStyleChange,
   onRestoreDefaults,
@@ -244,6 +246,8 @@ const StickerCreator = ({
   onBackgroundColorChange: (event: ChangeEvent<HTMLInputElement>) => void;
   transparentBackground: boolean;
   onTransparentChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  removeBackgroundClientSide: boolean;
+  onRemoveBackgroundClientSideChange: (event: ChangeEvent<HTMLInputElement>) => void;
   artisticStyle: string;
   onArtisticStyleChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onRestoreDefaults: () => void;
@@ -312,22 +316,34 @@ const StickerCreator = ({
             <option value="3D Render">{t('style3d')}</option>
           </select>
         </div>
-        <div className="background-controls">
+        <div className="background-options-wrapper">
+          <div className="background-controls">
+              <input
+                  type="checkbox"
+                  id="transparentBg"
+                  checked={transparentBackground}
+                  onChange={onTransparentChange}
+              />
+              <label htmlFor="transparentBg">{t('transparentBgLabel')}</label>
+              <input
+                  type="color"
+                  id="bgColorPicker"
+                  value={backgroundColor}
+                  onChange={onBackgroundColorChange}
+                  disabled={transparentBackground}
+                  aria-label="Background color picker"
+              />
+          </div>
+          <div className="background-controls sub-option">
             <input
                 type="checkbox"
-                id="transparentBg"
-                checked={transparentBackground}
-                onChange={onTransparentChange}
+                id="removeBgClientSide"
+                checked={removeBackgroundClientSide}
+                onChange={onRemoveBackgroundClientSideChange}
+                disabled={!transparentBackground}
             />
-            <label htmlFor="transparentBg">{t('transparentBgLabel')}</label>
-            <input
-                type="color"
-                id="bgColorPicker"
-                value={backgroundColor}
-                onChange={onBackgroundColorChange}
-                disabled={transparentBackground}
-                aria-label="Background color picker"
-            />
+            <label htmlFor="removeBgClientSide">{t('removeBgClientSideLabel')}</label>
+          </div>
         </div>
         <div className="button-group">
             <button onClick={onRequestImage} className="upload-button">
@@ -1003,6 +1019,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [error, setError] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF');
   const [transparentBackground, setTransparentBackground] = useState(true);
+  const [removeBackgroundClientSide, setRemoveBackgroundClientSide] = useState(true);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isCropModalOpen, setCropModalOpen] = useState(false);
   const [isCameraModalOpen, setCameraModalOpen] = useState(false);
@@ -1041,6 +1058,9 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         if (typeof savedState.transparentBackground === 'boolean') {
           setTransparentBackground(savedState.transparentBackground);
         }
+        if (typeof savedState.removeBackgroundClientSide === 'boolean') {
+            setRemoveBackgroundClientSide(savedState.removeBackgroundClientSide);
+        }
         if (savedState.gridSize) {
           setGridSize(savedState.gridSize);
         }
@@ -1068,6 +1088,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         artisticStyle,
         backgroundColor,
         transparentBackground,
+        removeBackgroundClientSide,
         gridSize,
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessionData));
@@ -1080,6 +1101,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     artisticStyle,
     backgroundColor,
     transparentBackground,
+    removeBackgroundClientSide,
     gridSize,
     isInitialized
   ]);
@@ -1211,7 +1233,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
             const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
             let processedImageUrl = originalImageUrl;
             
-            if (transparentBackground) {
+            if (transparentBackground && removeBackgroundClientSide) {
                 try {
                     processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
                 } catch (processError) {
@@ -1300,6 +1322,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       setError(null);
       setBackgroundColor('#FFFFFF');
       setTransparentBackground(true);
+      setRemoveBackgroundClientSide(true);
       setImageToCrop(null);
       setCropModalOpen(false);
       setArtisticStyle('Photo-realistic');
@@ -1377,6 +1400,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           onBackgroundColorChange={(e) => setBackgroundColor(e.target.value)}
           transparentBackground={transparentBackground}
           onTransparentChange={(e) => setTransparentBackground(e.target.checked)}
+          removeBackgroundClientSide={removeBackgroundClientSide}
+          onRemoveBackgroundClientSideChange={(e) => setRemoveBackgroundClientSide(e.target.checked)}
           artisticStyle={artisticStyle}
           onArtisticStyleChange={(e) => setArtisticStyle(e.target.value)}
           onRestoreDefaults={handleRestoreDefaults}
