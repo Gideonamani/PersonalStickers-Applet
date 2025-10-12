@@ -993,6 +993,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                 <ul>
                     <li dangerouslySetInnerHTML={{ __html: t('featureAI') }}></li>
                     <li dangerouslySetInnerHTML={{ __html: t('featureStyles') }}></li>
+                    <li dangerouslySetInnerHTML={{ __html: t('featureBrand') }}></li>
                     <li dangerouslySetInnerHTML={{ __html: t('featureCrop') }}></li>
                     <li dangerouslySetInnerHTML={{ __html: t('featureTransparency') }}></li>
                     <li dangerouslySetInnerHTML={{ __html: t('featureCustomize') }}></li>

@@ -34,5 +34,7 @@ export const generatePrompt = (
     };
     const englishLabel = getEnglishLabel(expression);
 
-    return `Generate a high-quality sticker of the character showing a "${englishLabel}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction} and a subtle, dark grey outline around the subject. The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+    const stickerFinish = 'The image should be a die-cut sticker with a triple-stroke border: a dark-grey outer stroke, a thin white middle stroke, and a dark-grey inner stroke. It must have clean cutout edges and smooth border curvature. Also add a subtle soft shadow under the sticker.'
+
+    return `Generate a high-quality sticker of the character showing a "${englishLabel}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction}. ${stickerFinish} The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
 };
