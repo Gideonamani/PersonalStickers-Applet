@@ -226,6 +226,7 @@ const ImageCropper = ({
 const StickerCreator = ({
   characterImage,
   onRequestImage,
+  onImageDrop,
   onGenerate,
   isLoading,
   backgroundColor,
@@ -240,6 +241,7 @@ const StickerCreator = ({
 }: {
   characterImage: string | null;
   onRequestImage: () => void;
+  onImageDrop: (file: File) => void;
   onGenerate: () => void;
   isLoading: boolean;
   backgroundColor: string;
@@ -272,9 +274,29 @@ const StickerCreator = ({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    // Note: To handle file drop, the file selection logic would need to be passed in.
-    // For this refactor, we are unifying all image requests through onRequestImage.
-    onRequestImage();
+    
+    let droppedFile: File | null = null;
+    if (e.dataTransfer.items) {
+      // Use DataTransferItemList interface to access the file(s)
+      for (const item of e.dataTransfer.items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          droppedFile = item.getAsFile();
+          break; // Handle only the first image file
+        }
+      }
+    } else {
+      // Fallback for older browsers
+      for (const file of e.dataTransfer.files) {
+        if (file.type.startsWith('image/')) {
+          droppedFile = file;
+          break; // Handle only the first image file
+        }
+      }
+    }
+    
+    if (droppedFile) {
+      onImageDrop(droppedFile);
+    }
   };
 
   return (
@@ -1171,8 +1193,14 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (file) {
+        handleImageDrop(file);
+    }
+  };
+
+  const handleImageDrop = (file: File) => {
     if (file && file.type.startsWith('image/')) {
-      setOriginalFilename(file.name);
+      setOriginalFilename(file.name || `dropped-image-${Date.now()}.png`);
       const reader = new FileReader();
       reader.onloadend = () => {
         setImageToCrop(reader.result as string);
@@ -1394,6 +1422,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         <StickerCreator
           characterImage={characterImage}
           onRequestImage={() => setSourceModalOpen(true)}
+          onImageDrop={handleImageDrop}
           onGenerate={handleGenerate}
           isLoading={isLoading}
           backgroundColor={backgroundColor}
