@@ -43,43 +43,11 @@ const distLab = (l: number, a: number, b: number, ref: LabTuple) => {
     return Math.sqrt(dL * dL + dA * dA + dB * dB);
 };
 
-const medianColor = (samples: RGBTuple[]): RGBTuple => {
-    const rs = samples.map((p) => p[0]).sort((a, b) => a - b);
-    const gs = samples.map((p) => p[1]).sort((a, b) => a - b);
-    const bs = samples.map((p) => p[2]).sort((a, b) => a - b);
-    return [
-        rs[(rs.length / 2) | 0],
-        gs[(gs.length / 2) | 0],
-        bs[(bs.length / 2) | 0],
-    ];
-};
-
-const pickPatch = (
-    data: Uint8ClampedArray,
-    width: number,
-    height: number,
-    x0: number,
-    y0: number,
-    size = 24,
-): RGBTuple[] => {
-    const colors: RGBTuple[] = [];
-    const xEnd = Math.min(width, x0 + size);
-    const yEnd = Math.min(height, y0 + size);
-    for (let y = y0; y < yEnd; y++) {
-        for (let x = x0; x < xEnd; x++) {
-            const offset = (y * width + x) * 4;
-            colors.push([data[offset], data[offset + 1], data[offset + 2]]);
-        }
-    }
-    return colors;
-};
-
 const applyFeather = (mask: Float32Array, width: number, height: number, radius: number) => {
     if (radius <= 0) {
         return;
     }
     const tmp = new Float32Array(mask.length);
-    const windowSize = radius * 2 + 1;
 
     // Horizontal pass
     for (let y = 0; y < height; y++) {
@@ -152,60 +120,85 @@ export const makeBackgroundTransparent = async (
             luminance[pixel] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         }
 
-        const cornerSamples = [
-            ...pickPatch(data, width, height, 0, 0),
-            ...pickPatch(data, width, height, Math.max(0, width - 24), 0),
-            ...pickPatch(data, width, height, 0, Math.max(0, height - 24)),
-            ...pickPatch(data, width, height, Math.max(0, width - 24), Math.max(0, height - 24)),
-        ];
-
-        const lightSamples: RGBTuple[] = [];
-        const darkSamples: RGBTuple[] = [];
-
-        const cornerLs = cornerSamples.map(([r, g, b]) => rgbToLab(r, g, b)[0]);
-        const sortedL = [...cornerLs].sort((a, b) => a - b);
-        const medianL = sortedL[(sortedL.length / 2) | 0];
-
-        cornerSamples.forEach((rgb, index) => {
-            if (cornerLs[index] >= medianL) {
-                lightSamples.push(rgb);
-            } else {
-                darkSamples.push(rgb);
+        const samples: RGBTuple[] = [];
+        const addSample = (x: number, y: number) => {
+            if (x < 0 || x >= width || y < 0 || y >= height) {
+                return;
             }
-        });
-
-        const c1 = medianColor(lightSamples.length ? lightSamples : cornerSamples);
-        const c2 = medianColor(darkSamples.length ? darkSamples : cornerSamples);
-        const c1Lab = rgbToLab(c1[0], c1[1], c1[2]);
-        const c2Lab = rgbToLab(c2[0], c2[1], c2[2]);
-
-        const scorePeriod = (period: number) => {
-            let score = 0;
-            const step = Math.max(1, Math.floor(width / 64));
-            for (let y = 0; y < height; y += step) {
-                const rowOffset = y * width;
-                for (let x = 0; x < width; x += step) {
-                    const index = rowOffset + x;
-                    const parity = (Math.floor(x / period) + Math.floor(y / period)) & 1;
-                    const dc1 = distLab(labL[index], labA[index], labB[index], c1Lab);
-                    const dc2 = distLab(labL[index], labA[index], labB[index], c2Lab);
-                    const match = parity ? dc2 < dc1 : dc1 < dc2;
-                    if (Math.min(dc1, dc2) < colorTol && match) {
-                        score++;
-                    }
-                }
-            }
-            return score;
+            const offset = (y * width + x) * 4;
+            samples.push([data[offset], data[offset + 1], data[offset + 2]]);
         };
 
-        let bestPeriod = tileGuess;
-        let bestScore = -1;
-        for (let period = Math.max(8, tileGuess - 6); period <= tileGuess + 6; period++) {
-            const score = scorePeriod(period);
-            if (score > bestScore) {
-                bestScore = score;
-                bestPeriod = period;
+        const edgeStep = Math.max(1, Math.floor(Math.min(width, height) / Math.max(8, tileGuess)));
+        for (let x = 0; x < width; x += edgeStep) {
+            addSample(x, 0);
+            addSample(x, height - 1);
+        }
+        for (let y = 0; y < height; y += edgeStep) {
+            addSample(0, y);
+            addSample(width - 1, y);
+        }
+        addSample(0, 0);
+        addSample(width - 1, 0);
+        addSample(0, height - 1);
+        addSample(width - 1, height - 1);
+
+        if (samples.length === 0) {
+            return imageUrl;
+        }
+
+        type Cluster = { lab: LabTuple; rgb: RGBTuple; count: number };
+        const clusters: Cluster[] = [];
+        const clusterMergeTol = Math.max(4, colorTol * 0.6);
+
+        for (const rgb of samples) {
+            const lab = rgbToLab(rgb[0], rgb[1], rgb[2]);
+            let bestIndex = -1;
+            let bestDist = Number.POSITIVE_INFINITY;
+            clusters.forEach((cluster, index) => {
+                const d = distLab(lab[0], lab[1], lab[2], cluster.lab);
+                if (d < clusterMergeTol && d < bestDist) {
+                    bestDist = d;
+                    bestIndex = index;
+                }
+            });
+            if (bestIndex >= 0) {
+                const cluster = clusters[bestIndex];
+                const count = cluster.count + 1;
+                const newLab: LabTuple = [
+                    (cluster.lab[0] * cluster.count + lab[0]) / count,
+                    (cluster.lab[1] * cluster.count + lab[1]) / count,
+                    (cluster.lab[2] * cluster.count + lab[2]) / count,
+                ];
+                const newRgb: RGBTuple = [
+                    (cluster.rgb[0] * cluster.count + rgb[0]) / count,
+                    (cluster.rgb[1] * cluster.count + rgb[1]) / count,
+                    (cluster.rgb[2] * cluster.count + rgb[2]) / count,
+                ];
+                cluster.lab = newLab;
+                cluster.rgb = newRgb;
+                cluster.count = count;
+            } else {
+                clusters.push({ lab, rgb, count: 1 });
             }
+        }
+
+        clusters.sort((a, b) => b.count - a.count);
+        const bgClusters = clusters.slice(0, Math.min(2, clusters.length));
+        if (bgClusters.length === 0) {
+            return imageUrl;
+        }
+
+        const bgLabs = bgClusters.map((cluster) => cluster.lab);
+        if (bgLabs.length === 1) {
+            bgLabs.push(bgLabs[0]);
+        }
+
+        let tolerance = Math.max(colorTol, 12);
+        if (bgLabs.length >= 2) {
+            const [lab1, lab2] = bgLabs;
+            const clusterDistance = distLab(lab1[0], lab1[1], lab1[2], lab2);
+            tolerance = Math.min(45, Math.max(tolerance, clusterDistance * 0.45));
         }
 
         const grad = new Float32Array(totalPixels);
@@ -232,50 +225,55 @@ export const makeBackgroundTransparent = async (
             }
         }
 
-        const like = new Float32Array(totalPixels);
-        for (let y = 0; y < height; y++) {
-            const rowOffset = y * width;
-            for (let x = 0; x < width; x++) {
-                const index = rowOffset + x;
-                const parity = (Math.floor(x / bestPeriod) + Math.floor(y / bestPeriod)) & 1;
-                const dc1 = distLab(labL[index], labA[index], labB[index], c1Lab);
-                const dc2 = distLab(labL[index], labA[index], labB[index], c2Lab);
-                const dc = parity ? dc2 : dc1;
-                let likelihood = Math.max(0, 1 - dc / colorTol);
-                if (grad[index] > gradKeep) {
-                    likelihood *= 0.2;
+        const distanceToBackground = (index: number) => {
+            const l = labL[index];
+            const a = labA[index];
+            const b = labB[index];
+            let shortest = Number.POSITIVE_INFINITY;
+            for (const lab of bgLabs) {
+                const d = distLab(l, a, b, lab);
+                if (d < shortest) {
+                    shortest = d;
                 }
-                like[index] = likelihood;
             }
-        }
+            return shortest;
+        };
 
         const queueX = new Int32Array(totalPixels);
         const queueY = new Int32Array(totalPixels);
-        const seen = new Uint8Array(totalPixels);
+        const visited = new Uint8Array(totalPixels);
         let head = 0;
         let tail = 0;
 
-        const enqueue = (x: number, y: number) => {
-            const idx = y * width + x;
-            if (seen[idx]) {
+        const tryEnqueue = (x: number, y: number, force = false) => {
+            if (x < 0 || x >= width || y < 0 || y >= height) {
                 return;
             }
-            seen[idx] = 1;
+            const idx = y * width + x;
+            if (visited[idx]) {
+                return;
+            }
+            const dist = distanceToBackground(idx);
+            const threshold = force ? tolerance * 1.35 : tolerance;
+            if (dist > threshold) {
+                return;
+            }
+            if (!force && gradKeep > 0 && grad[idx] > gradKeep && dist > tolerance * 0.4) {
+                return;
+            }
+            visited[idx] = 1;
             queueX[tail] = x;
             queueY[tail] = y;
             tail++;
         };
 
-        for (let x = 0; x < width; x++) {
-            if (like[x] > 0.5) enqueue(x, 0);
-            const bottom = (height - 1) * width + x;
-            if (like[bottom] > 0.5) enqueue(x, height - 1);
+        for (let x = 0; x < width; x += edgeStep) {
+            tryEnqueue(x, 0, true);
+            tryEnqueue(x, height - 1, true);
         }
-        for (let y = 0; y < height; y++) {
-            const leftIndex = y * width;
-            const rightIndex = y * width + (width - 1);
-            if (like[leftIndex] > 0.5) enqueue(0, y);
-            if (like[rightIndex] > 0.5) enqueue(width - 1, y);
+        for (let y = 0; y < height; y += edgeStep) {
+            tryEnqueue(0, y, true);
+            tryEnqueue(width - 1, y, true);
         }
 
         const neighbours = [
@@ -289,24 +287,14 @@ export const makeBackgroundTransparent = async (
             const x = queueX[head];
             const y = queueY[head];
             head++;
-            const idx = y * width + x;
-            like[idx] = 1.0;
             for (const [dx, dy] of neighbours) {
-                const nx = x + dx;
-                const ny = y + dy;
-                if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-                    continue;
-                }
-                const nIdx = ny * width + nx;
-                if (!seen[nIdx] && like[nIdx] > 0.5) {
-                    enqueue(nx, ny);
-                }
+                tryEnqueue(x + dx, y + dy);
             }
         }
 
         const mask = new Float32Array(totalPixels);
         for (let i = 0; i < totalPixels; i++) {
-            mask[i] = like[i] >= 1 ? 1 : 0;
+            mask[i] = visited[i] ? 1 : 0;
         }
 
         if (feather > 0) {
