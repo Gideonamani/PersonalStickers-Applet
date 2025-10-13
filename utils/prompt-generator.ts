@@ -18,7 +18,11 @@ export const generatePrompt = (
         ? 'the background must be 100% transparent with a real alpha channel—no checkerboard simulation, halo, glow, or drop shadow'
         : `fill the entire background with the flat, solid hex colour ${backgroundColor}. Do not add gradients, lighting flares, textures, sparkles, text, or extra graphics`;
 
-    const outlineInstruction = 'Create a digital sticker outline designed in the same cohesive pack style: a clean image subject cutout with a consistent medium-thick outline (3–5px) in solid white and a soft gray shadow. The outline should be even all around, with no harsh edge variations. The lighting, color tone, and shadow direction should be consistent across all stickers.';
+    const outlineInstruction = `Create a digital sticker outline in a cohesive pack style. 
+    The design must feature: A clean subject cutout with smooth edges. A consistent medium-thick white outline (around 4 px) that fully surrounds the subject — no edge of the subject should touch the canvas border. 
+    Around the white outline, add a thin medium-gray border (1 px) to ensure contrast on both white and transparent backgrounds. 
+    Maintain equal outline thickness on all sides — no tapered or faded edges. 
+    No directional shadows or blurs; only the clean double-outline effect (white + thin gray).`;
 
     const framingInstruction =
         expression.type === 'plain'
