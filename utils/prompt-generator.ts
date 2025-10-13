@@ -1,29 +1,29 @@
-import type { Expression } from '../types';
+import type { Expression, Translations } from '../types';
 
 export const generatePrompt = (
     expression: Expression,
     artisticStyle: string,
     transparentBackground: boolean,
     backgroundColor: string,
-    translations: any
+    translations: Translations
 ): string => {
+    const styleMap: Record<string, string> = {
+        Anime: 'a vibrant anime/manga cel-shaded style with bold, tidy linework',
+        '3D Render': 'a polished, well-lit 3D render style similar to contemporary animated features',
+        'Photo-realistic': 'a photo-realistic style that looks like a professional studio photograph',
+    };
+    const styleInstruction = styleMap[artisticStyle] ?? 'a cohesive, high-quality illustration style';
+
     const backgroundInstruction = transparentBackground
-        ? 'a transparent background. The output image must be a PNG with a true alpha channel, not a rendered checkerboard pattern representing transparency.'
-        : `a solid, opaque background of the hex color ${backgroundColor}`;
+        ? 'the background must be 100% transparent with a real alpha channel—no checkerboard simulation, halo, glow, or drop shadow'
+        : `fill the entire background with the flat, solid hex colour ${backgroundColor}. Do not add gradients, lighting flares, textures, sparkles, text, or extra graphics`;
 
-    let styleInstruction = '';
-    switch (artisticStyle) {
-        case 'Anime': styleInstruction = 'a vibrant Anime/Manga style'; break;
-        case '3D Render': styleInstruction = 'a polished 3D render style, similar to modern animated films'; break;
-        case 'Photo-realistic': default: styleInstruction = 'a photo-realistic style, making it look like a real high-resolution photograph'; break;
-    }
+    const outlineInstruction = 'Create a digital sticker outline designed in the same cohesive pack style: a clean image subject cutout with a consistent medium-thick outline (3–5px) in solid white and a soft gray shadow. The outline should be even all around, with no harsh edge variations. The lighting, color tone, and shadow direction should be consistent across all stickers.';
 
-    let specificInstruction = '';
-    if (expression.type === 'plain') {
-        specificInstruction = 'Create a clean, simple, close-up sticker focusing on the facial expression of the character. The character should be shown from the chest up.';
-    } else { // expressive
-        specificInstruction = 'Create a high-energy, meme-style sticker. The character can have exaggerated features or be in a more dynamic pose to match the phrase. Feel free to add subtle, non-distracting graphic elements like motion lines or sparkles if it enhances the expression.';
-    }
+    const framingInstruction =
+        expression.type === 'plain'
+            ? 'Use a chest-up crop that keeps the pose natural, centred, and evenly padded on all sides.'
+            : 'Use a dynamic, meme-ready pose that stays centred with even padding; keep the entire body portion visible and avoid extra props or text.';
 
     const getEnglishLabel = (exp: Expression) => {
         if (!exp.isDefault) {
@@ -34,7 +34,8 @@ export const generatePrompt = (
     };
     const englishLabel = getEnglishLabel(expression);
 
-    const stickerFinish = 'The image should be a die-cut sticker with a triple-stroke border: a dark-grey outer stroke, a thin white middle stroke, and a dark-grey inner stroke. It must have clean cutout edges and smooth border curvature. Also add a subtle soft shadow under the sticker.'
+    const optimisationNote =
+        'Optimise the artwork for use as a WhatsApp chat sticker so it reads clearly at small size and removes cleanly with transparency tools.';
 
-    return `Generate a high-quality sticker of the character showing a "${englishLabel}" expression. ${specificInstruction} The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction}. ${stickerFinish} The final output must be a PNG file. Ensure the style is consistent across all stickers. Do not add extra background elements or text.`;
+    return `Generate a 512x512 PNG sticker featuring the same character showing a "${englishLabel}" expression. ${framingInstruction} The artistic style MUST be ${styleInstruction}. ${optimisationNote} Ensure the subject remains centred, fully inside the frame, and maintains consistent skin tone, clothing, and hairstyle with previous stickers from the user photo reference. The sticker must have ${backgroundInstruction}. ${outlineInstruction} Keep the edges sharp with minimal anti-aliasing to support clean background removal. Output a single PNG image and nothing else.`;
 };
