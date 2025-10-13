@@ -16,6 +16,8 @@ export type Sticker = Expression & {
     status: StickerStatus;
 };
 
+export type Translations = Partial<Record<Language, Record<string, string>>>;
+
 export type TransparencyOptions = {
     colorTol: number;
     tileGuess: number;
