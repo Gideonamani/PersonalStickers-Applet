@@ -17,7 +17,6 @@ import {
 } from './components/Icons';
 import { makeBackgroundTransparent } from './utils/transparency';
 import { generatePrompt } from './utils/prompt-generator';
-import { Numbuh4 } from './sample-image-data';
 import { normalizeImageSize, MAX_STICKER_DIMENSION, dataUrlToBlob } from './utils/image';
 
 import './index.css';
@@ -80,6 +79,47 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
     );
 };
 
+// --- Asset Context ---
+interface AssetContextType {
+    model0Url: string;
+}
+
+const AssetContext = createContext<AssetContextType | undefined>(undefined);
+
+const useAssets = () => {
+    const context = useContext(AssetContext);
+    if (!context) {
+        throw new Error('useAssets must be used within an AssetProvider');
+    }
+    return context;
+};
+
+const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [model0Url, setModel0Url] = useState('');
+
+    useEffect(() => {
+        let objectUrl: string | null = null;
+        fetch('./assets/Model_0.png')
+            .then(res => res.blob())
+            .then(blob => {
+                objectUrl = URL.createObjectURL(blob);
+                setModel0Url(objectUrl);
+            })
+            .catch(err => console.error("Failed to load Model_0.png", err));
+
+        return () => {
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, []);
+
+    return (
+        <AssetContext.Provider value={{ model0Url }}>
+            {children}
+        </AssetContext.Provider>
+    );
+};
 
 // --- Gemini API Configuration ---
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -898,14 +938,17 @@ const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemov
     );
 };
 
-const Footer = () => (
-    <footer className="app-footer">
-      Built with enthusiasm by Keon on AI Studio
-    </footer>
-  );
+const Footer = () => {
+    return (
+        <footer className="app-footer">
+          <span>Built with enthusiasm by Keon on AI Studio</span>
+        </footer>
+    );
+};
 
 const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const { t } = useLanguage();
+    const { model0Url } = useAssets();
     const [activeStep, setActiveStep] = useState(0);
     // Fix: Use ReturnType<typeof setInterval> to correctly type the ref for both browser (number) and Node.js (Timeout) environments.
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -919,7 +962,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     }, []);
 
     const stepsData = [
-        { title: 'step1Title', p: 'step1P', image: Numbuh4 },
+        { title: 'step1Title', p: 'step1P', image: model0Url },
         { title: 'step2Title', p: 'step2P' },
         { title: 'step3Title', p: 'step3P' },
         { title: 'step4Title', p: 'step4P' },
@@ -988,7 +1031,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                         </button>
                     </div>
                     <div className="intro-image-container">
-                        <img src={Numbuh4} alt={t('explainerIntroTitle')} className="hero-image-preview" />
+                        {model0Url && <img src={model0Url} alt={t('explainerIntroTitle')} className="hero-image-preview" />}
                     </div>
                 </div>
             </section>
@@ -1551,11 +1594,13 @@ const App = () => {
 
     return (
         <LanguageProvider>
-            {page === 'explainer' ? (
-                <ExplainerPage onNavigate={navigateToApp} />
-            ) : (
-                <StickerAppPage onNavigateHome={navigateToHome}/>
-            )}
+            <AssetProvider>
+                {page === 'explainer' ? (
+                    <ExplainerPage onNavigate={navigateToApp} />
+                ) : (
+                    <StickerAppPage onNavigateHome={navigateToHome}/>
+                )}
+            </AssetProvider>
         </LanguageProvider>
     );
 }
