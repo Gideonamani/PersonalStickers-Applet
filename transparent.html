@@ -15,21 +15,6 @@
         h1 {
             margin-bottom: 0.75rem;
         }
-        fieldset {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 0.75rem;
-            border: 1px solid rgba(127, 127, 127, 0.4);
-            padding: 1rem;
-            margin-block: 1rem;
-        }
-        label {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-            font-size: 0.9rem;
-        }
-        input[type="number"],
         input[type="file"] {
             font-size: 0.95rem;
         }
@@ -48,10 +33,12 @@
             flex-direction: column;
             gap: 0.75rem;
         }
-        .preview img {
-            width: 100%;
-            height: auto;
-            object-fit: contain;
+        .preview-frame {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 280px;
             background:
                 conic-gradient(from 45deg, #ddd 0 25%, #fff 0 50%, #ddd 0 75%, #fff 0),
                 repeating-conic-gradient(#ddd 0 25%, #fff 0 50%);
@@ -59,6 +46,71 @@
             border: 1px solid rgba(127, 127, 127, 0.4);
             border-radius: 6px;
             padding: 0.5rem;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .preview-frame img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: block;
+            border-radius: 4px;
+        }
+        .preview-frame.pick-mode {
+            cursor: crosshair;
+        }
+        .preview-frame.pick-mode.disabled {
+            cursor: not-allowed;
+        }
+        .seed-marker {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            background: #ff6b6b;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+        }
+        .seed-toolbar {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .seed-toolbar p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #333;
+        }
+        .seed-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .seed-buttons button {
+            padding: 0.45rem 1rem;
+            border-radius: 6px;
+            border: 1px solid #d0d0d0;
+            background: #f7f7f7;
+            color: #333;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .seed-buttons button:hover:not(:disabled) {
+            background: #ebebeb;
+            border-color: #c0c0c0;
+        }
+        .seed-buttons button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
         }
         #log {
             margin-top: 1rem;
@@ -73,42 +125,34 @@
 </head>
 <body>
     <h1>Background Transparency Sandbox</h1>
-    <p>Select a PNG from disk, tweak the knobs, and hit the button to run the canvas-based background remover.</p>
+    <p>Select a PNG from disk, hit the button once, then click any remaining background regions in the processed preview to clean them up.</p>
 
     <div>
         <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp">
     </div>
-
-    <fieldset>
-        <legend>Options</legend>
-        <label>
-            Color tolerance
-            <input id="colorTol" type="number" value="10" min="1" max="100">
-        </label>
-        <label>
-            Tile guess
-            <input id="tileGuess" type="number" value="16" min="4" max="64">
-        </label>
-        <label>
-            Gradient keep
-            <input id="gradKeep" type="number" value="10" min="0" max="64">
-        </label>
-        <label>
-            Feather radius
-            <input id="feather" type="number" value="2" min="0" max="32">
-        </label>
-    </fieldset>
 
     <button id="runBtn" disabled>Remove Background</button>
 
     <div class="preview-grid">
         <div class="preview">
             <h2>Original</h2>
-            <img id="originalPreview" alt="Original preview placeholder">
+            <div class="preview-frame" id="originalFrame">
+                <img id="originalPreview" alt="Original preview placeholder">
+            </div>
         </div>
         <div class="preview">
             <h2>Processed</h2>
-            <img id="processedPreview" alt="Processed preview placeholder">
+            <div class="preview-frame pick-mode disabled" id="processedFrame">
+                <img id="processedPreview" alt="Processed preview placeholder">
+            </div>
+            <div class="seed-toolbar">
+                <p>Click anywhere on the processed image to sample background you still see. Each pick triggers a quick reprocess.</p>
+                <p id="seedStatus">No seeds yet — click the processed image to add a sampling point.</p>
+                <div class="seed-buttons">
+                    <button id="undoSeedBtn" disabled>Undo seed</button>
+                    <button id="clearSeedsBtn" disabled>Clear seeds</button>
+                </div>
+            </div>
             <a id="downloadLink" download="processed.png" hidden>Download PNG</a>
         </div>
     </div>
@@ -123,18 +167,90 @@
         const downloadLink = document.getElementById('downloadLink');
         const logView = document.getElementById('log');
 
-        const optionInputs = {
-            colorTol: document.getElementById('colorTol'),
-            tileGuess: document.getElementById('tileGuess'),
-            gradKeep: document.getElementById('gradKeep'),
-            feather: document.getElementById('feather'),
+        const processedFrame = document.getElementById('processedFrame');
+        const seedStatusEl = document.getElementById('seedStatus');
+        const undoSeedBtn = document.getElementById('undoSeedBtn');
+        const clearSeedsBtn = document.getElementById('clearSeedsBtn');
+
+        const DEFAULT_OPTIONS = {
+            colorTol: 10,
+            tileGuess: 16,
+            gradKeep: 10,
+            feather: 2,
         };
 
         let currentDataUrl = null;
+        let seedPoints = [];
+        let isProcessing = false;
+        let processedDimensions = null;
+
+        const baseSeedMessage = 'No seeds yet — click the processed image to add a sampling point.';
 
         const log = (text) => {
             const timestamp = new Date().toLocaleTimeString();
             logView.textContent = `[${timestamp}] ${text}`;
+        };
+
+        const refreshPickAvailability = () => {
+            if (processedPreview.src) {
+                processedFrame.classList.remove('disabled');
+            } else {
+                processedFrame.classList.add('disabled');
+            }
+        };
+
+        const updateSeedUI = () => {
+            const count = seedPoints.length;
+            seedStatusEl.textContent = count
+                ? `${count} seed${count === 1 ? '' : 's'} selected.`
+                : baseSeedMessage;
+            undoSeedBtn.disabled = count === 0;
+            clearSeedsBtn.disabled = count === 0;
+            processedFrame.querySelectorAll('.seed-marker').forEach(el => el.remove());
+            if (!processedDimensions || !count) {
+                return;
+            }
+            seedPoints.forEach((seed, index) => {
+                const marker = document.createElement('span');
+                marker.className = 'seed-marker';
+                marker.textContent = index + 1;
+                marker.style.left = `${(seed.x / processedDimensions.width) * 100}%`;
+                marker.style.top = `${(seed.y / processedDimensions.height) * 100}%`;
+                processedFrame.appendChild(marker);
+            });
+        };
+
+        const processImage = async (message = 'Processing...') => {
+            if (!currentDataUrl) {
+                log('Please select an image first.');
+                return;
+            }
+            if (isProcessing) {
+                return;
+            }
+            isProcessing = true;
+            runBtn.disabled = true;
+            downloadLink.hidden = true;
+            log(message);
+            try {
+                const options = {
+                    ...DEFAULT_OPTIONS,
+                    seedPoints,
+                    mode: seedPoints.length ? 'auto+seed' : 'auto',
+                };
+                const processedUrl = await makeBackgroundTransparent(currentDataUrl, options);
+                processedPreview.src = processedUrl;
+                downloadLink.href = processedUrl;
+                downloadLink.hidden = false;
+                refreshPickAvailability();
+                log('Done!');
+            } catch (err) {
+                console.error(err);
+                log(`Error: ${err instanceof Error ? err.message : String(err)}`);
+            } finally {
+                isProcessing = false;
+                runBtn.disabled = !currentDataUrl;
+            }
         };
 
         fileInput.addEventListener('change', () => {
@@ -143,6 +259,10 @@
                 currentDataUrl = null;
                 originalPreview.removeAttribute('src');
                 processedPreview.removeAttribute('src');
+                processedDimensions = null;
+                seedPoints = [];
+                updateSeedUI();
+                refreshPickAvailability();
                 runBtn.disabled = true;
                 downloadLink.hidden = true;
                 log('Waiting for image...');
@@ -153,6 +273,10 @@
                 currentDataUrl = reader.result;
                 originalPreview.src = currentDataUrl;
                 processedPreview.removeAttribute('src');
+                processedDimensions = null;
+                seedPoints = [];
+                updateSeedUI();
+                refreshPickAvailability();
                 downloadLink.hidden = true;
                 runBtn.disabled = false;
                 log(`Loaded ${file.name} (${Math.round(file.size / 1024)} KB)`);
@@ -163,32 +287,65 @@
             reader.readAsDataURL(file);
         });
 
-        runBtn.addEventListener('click', async () => {
-            if (!currentDataUrl) {
-                log('Please select an image first.');
+        runBtn.addEventListener('click', () => processImage('Processing...'));
+
+        processedPreview.addEventListener('load', () => {
+            processedDimensions = {
+                width: processedPreview.naturalWidth,
+                height: processedPreview.naturalHeight,
+            };
+            refreshPickAvailability();
+            updateSeedUI();
+        });
+
+        processedFrame.addEventListener('click', (event) => {
+            if (!processedPreview.src || !processedDimensions || isProcessing) {
                 return;
             }
-            runBtn.disabled = true;
-            log('Processing...');
-            try {
-                const opts = {
-                    colorTol: Number(optionInputs.colorTol.value),
-                    tileGuess: Number(optionInputs.tileGuess.value),
-                    gradKeep: Number(optionInputs.gradKeep.value),
-                    feather: Number(optionInputs.feather.value),
-                };
-                const processedUrl = await makeBackgroundTransparent(currentDataUrl, opts);
-                processedPreview.src = processedUrl;
-                downloadLink.href = processedUrl;
-                downloadLink.hidden = false;
-                log('Done!');
-            } catch (err) {
-                console.error(err);
-                log(`Error: ${err instanceof Error ? err.message : String(err)}`);
-            } finally {
-                runBtn.disabled = false;
+            const rect = processedPreview.getBoundingClientRect();
+            if (!rect.width || !rect.height) {
+                return;
             }
+            if (
+                event.clientX < rect.left ||
+                event.clientX > rect.right ||
+                event.clientY < rect.top ||
+                event.clientY > rect.bottom
+            ) {
+                return;
+            }
+            const relativeX = (event.clientX - rect.left) / rect.width;
+            const relativeY = (event.clientY - rect.top) / rect.height;
+            const x = relativeX * processedDimensions.width;
+            const y = relativeY * processedDimensions.height;
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return;
+            }
+            seedPoints = [...seedPoints, { x, y, force: true }];
+            updateSeedUI();
+            processImage('Applying seed...');
         });
+
+        undoSeedBtn.addEventListener('click', () => {
+            if (!seedPoints.length || isProcessing) {
+                return;
+            }
+            seedPoints = seedPoints.slice(0, -1);
+            updateSeedUI();
+            processImage('Updating transparency...');
+        });
+
+        clearSeedsBtn.addEventListener('click', () => {
+            if (!seedPoints.length || isProcessing) {
+                return;
+            }
+            seedPoints = [];
+            updateSeedUI();
+            processImage('Reprocessing without manual seeds...');
+        });
+
+        updateSeedUI();
+        refreshPickAvailability();
 
         const loadImage = (src) => new Promise((resolve, reject) => {
             const image = new Image();
@@ -267,6 +424,8 @@
                 tileGuess = 16,
                 gradKeep = 10,
                 feather = 2,
+                seedPoints = [],
+                mode = 'auto',
             } = opts;
 
             try {
@@ -300,6 +459,13 @@
                     luminance[pixel] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
                 }
 
+                const normalizeSeed = ({ x, y, force }) => ({
+                    x: Math.max(0, Math.min(width - 1, Math.round(x))),
+                    y: Math.max(0, Math.min(height - 1, Math.round(y))),
+                    force: force ?? true,
+                });
+                const seeds = (seedPoints || []).map(normalizeSeed);
+
                 const samples = [];
                 const addSample = (x, y) => {
                     if (x < 0 || x >= width || y < 0 || y >= height) {
@@ -310,18 +476,25 @@
                 };
 
                 const edgeStep = Math.max(1, Math.floor(Math.min(width, height) / Math.max(8, tileGuess)));
-                for (let x = 0; x < width; x += edgeStep) {
-                    addSample(x, 0);
-                    addSample(x, height - 1);
+                if (mode !== 'seed') {
+                    for (let x = 0; x < width; x += edgeStep) {
+                        addSample(x, 0);
+                        addSample(x, height - 1);
+                    }
+                    for (let y = 0; y < height; y += edgeStep) {
+                        addSample(0, y);
+                        addSample(width - 1, y);
+                    }
+                    addSample(0, 0);
+                    addSample(width - 1, 0);
+                    addSample(0, height - 1);
+                    addSample(width - 1, height - 1);
                 }
-                for (let y = 0; y < height; y += edgeStep) {
-                    addSample(0, y);
-                    addSample(width - 1, y);
+                for (const { x, y } of seeds) {
+                    for (let i = 0; i < 4; i++) {
+                        addSample(x, y);
+                    }
                 }
-                addSample(0, 0);
-                addSample(width - 1, 0);
-                addSample(0, height - 1);
-                addSample(width - 1, height - 1);
 
                 if (samples.length === 0) {
                     return imageUrl;
@@ -356,12 +529,29 @@
                         ];
                         cluster.count = count;
                     } else {
-                        clusters.push({ lab, rgb, count: 1 });
+                        clusters.push({ lab, rgb: [...rgb], count: 1 });
                     }
                 }
 
                 clusters.sort((a, b) => b.count - a.count);
                 const bgClusters = clusters.slice(0, Math.min(2, clusters.length));
+                if (bgClusters.length < 2) {
+                    for (const seed of seeds) {
+                        const offset = (seed.y * width + seed.x) * 4;
+                        const lab = rgbToLab(data[offset], data[offset + 1], data[offset + 2]);
+                        const hasClose = bgClusters.some(cluster => distLab(lab[0], lab[1], lab[2], cluster.lab) < 2);
+                        if (!hasClose) {
+                            bgClusters.push({
+                                lab,
+                                rgb: [data[offset], data[offset + 1], data[offset + 2]],
+                                count: 1,
+                            });
+                            if (bgClusters.length >= 2) {
+                                break;
+                            }
+                        }
+                    }
+                }
                 if (bgClusters.length === 0) {
                     return imageUrl;
                 }
@@ -373,8 +563,7 @@
 
                 let tolerance = Math.max(colorTol, 12);
                 if (bgLabs.length >= 2) {
-                    const lab1 = bgLabs[0];
-                    const lab2 = bgLabs[1];
+                    const [lab1, lab2] = bgLabs;
                     const clusterDistance = distLab(lab1[0], lab1[1], lab1[2], lab2);
                     tolerance = Math.min(45, Math.max(tolerance, clusterDistance * 0.45));
                 }
@@ -423,6 +612,9 @@
                 let head = 0;
                 let tail = 0;
 
+                const useAuto = mode !== 'seed';
+                const useSeeds = seeds.length > 0 && mode !== 'auto';
+
                 const tryEnqueue = (x, y, force = false) => {
                     if (x < 0 || x >= width || y < 0 || y >= height) {
                         return;
@@ -445,13 +637,20 @@
                     tail++;
                 };
 
-                for (let x = 0; x < width; x += edgeStep) {
-                    tryEnqueue(x, 0, true);
-                    tryEnqueue(x, height - 1, true);
+                if (useAuto) {
+                    for (let x = 0; x < width; x += edgeStep) {
+                        tryEnqueue(x, 0, true);
+                        tryEnqueue(x, height - 1, true);
+                    }
+                    for (let y = 0; y < height; y += edgeStep) {
+                        tryEnqueue(0, y, true);
+                        tryEnqueue(width - 1, y, true);
+                    }
                 }
-                for (let y = 0; y < height; y += edgeStep) {
-                    tryEnqueue(0, y, true);
-                    tryEnqueue(width - 1, y, true);
+                if (useSeeds) {
+                    for (const seed of seeds) {
+                        tryEnqueue(seed.x, seed.y, seed.force);
+                    }
                 }
 
                 const neighbours = [
