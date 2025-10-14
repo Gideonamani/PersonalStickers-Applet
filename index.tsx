@@ -1374,25 +1374,42 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   };
 
   const handleRestoreDefaults = () => {
-    if (window.confirm(t('confirmRestore'))) {
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      
-      const defaults = getInitialExpressions();
-      setExpressions(defaults);
-      setStickers(defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+    if (!window.confirm(t('confirmRestore'))) {
+      return;
+    }
 
-      setUserImage(null);
-      setOriginalFilename(null);
-      setIsLoading(false);
-      setError(null);
-      setBackgroundColor('#FFFFFF');
-      setTransparentBackground(true);
-      setImageToCrop(null);
-      setCropModalOpen(false);
-      setArtisticStyle('Photo-realistic');
-      setGridSize('medium');
-      setExpressionTypeToAdd(null);
-      setEditingSticker(null);
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+
+    const defaults = getInitialExpressions();
+    setExpressions(defaults);
+    setStickers(prev => {
+      prev.forEach(sticker => {
+        if (sticker.imageUrl && sticker.imageUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(sticker.imageUrl);
+        }
+        if (sticker.originalImageUrl && sticker.originalImageUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(sticker.originalImageUrl);
+        }
+      });
+      return defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const }));
+    });
+
+    setUserImage(null);
+    setOriginalFilename(null);
+    setIsLoading(false);
+    setError(null);
+    setBackgroundColor('#FFFFFF');
+    setTransparentBackground(true);
+    setImageToCrop(null);
+    setArtisticStyle('Photo-realistic');
+    setGridSize('medium');
+    setExpressionTypeToAdd(null);
+    setEditingSticker(null);
+    setCropModalOpen(false);
+    setCameraModalOpen(false);
+    setSourceModalOpen(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
