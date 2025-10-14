@@ -16,13 +16,21 @@ export type Sticker = Expression & {
     status: StickerStatus;
 };
 
-export type Translations = Partial<Record<Language, Record<string, string>>>;
-
 export type TransparencyOptions = {
     colorTol: number;
     tileGuess: number;
     gradKeep: number;
     feather: number;
+    seedPoints?: TransparencySeed[];
+    mode?: 'auto' | 'seed' | 'auto+seed';
 };
 
 export type GridSize = 'small' | 'medium' | 'large';
+
+export type TransparencySeed = {
+    x: number; // Pixel coordinate in the source image
+    y: number;
+    force?: boolean;
+};
+
+export type Translations = Partial<Record<Language, Record<string, string>>>;

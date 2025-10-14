@@ -9,7 +9,7 @@ import JSZip from 'jszip';
 import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
 
 import { 
-    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize 
+    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize, TransparencySeed 
 } from './types';
 import { 
     DownloadIcon, BinIcon, EditIcon, RefreshIcon, AddIcon, CameraIcon, 
@@ -102,6 +102,13 @@ const downloadImage = (imageUrl: string, filename: string) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+};
+
+const DEFAULT_TRANSPARENCY_OPTIONS: TransparencyOptions = {
+    colorTol: 10,
+    tileGuess: 16,
+    gradKeep: 10,
+    feather: 2,
 };
 
 // --- React Components ---
@@ -450,35 +457,89 @@ const AddExpressionModal = ({ type, onAdd, onClose }: { type: ExpressionType; on
 
 const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticker; onSave: (label: string, newImageUrl: string) => void; onClose: () => void; }) => {
     const { t } = useLanguage();
-    const [params, setParams] = useState<TransparencyOptions>({
-        colorTol: 10,
-        tileGuess: 16,
-        gradKeep: 10,
-        feather: 2,
-    });
+    const [seedPoints, setSeedPoints] = useState<TransparencySeed[]>([]);
     const [previewUrl, setPreviewUrl] = useState(sticker.imageUrl);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [imageDims, setImageDims] = useState<{ width: number; height: number } | null>(null);
     const modalContentRef = useRef<HTMLDivElement>(null);
+    const imgRef = useRef<HTMLImageElement>(null);
     const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
 
     useEffect(() => {
-        if (!sticker.originalImageUrl) return;
+        setSeedPoints([]);
+        setPreviewUrl(sticker.imageUrl);
+        setImageDims(null);
+    }, [sticker.imageUrl, sticker.originalImageUrl, sticker.label]);
 
+    useEffect(() => {
+        if (!sticker.originalImageUrl) {
+            setIsProcessing(false);
+            return;
+        }
+        let cancelled = false;
         setIsProcessing(true);
-        const handler = setTimeout(() => {
-            makeBackgroundTransparent(sticker.originalImageUrl!, params).then(newUrl => {
-                setPreviewUrl(newUrl);
-                setIsProcessing(false);
+        const timer = window.setTimeout(() => {
+            makeBackgroundTransparent(sticker.originalImageUrl!, {
+                ...DEFAULT_TRANSPARENCY_OPTIONS,
+                seedPoints,
+                mode: seedPoints.length ? 'auto+seed' : 'auto',
+            }).then(newUrl => {
+                if (!cancelled) {
+                    setPreviewUrl(newUrl);
+                    setIsProcessing(false);
+                }
+            }).catch(error => {
+                console.error('Error refining transparency:', error);
+                if (!cancelled) {
+                    setPreviewUrl(sticker.originalImageUrl!);
+                    setIsProcessing(false);
+                }
             });
-        }, 300);
+        }, 150);
 
         return () => {
-            clearTimeout(handler);
+            cancelled = true;
+            clearTimeout(timer);
         };
-    }, [params, sticker.originalImageUrl]);
+    }, [seedPoints, sticker.originalImageUrl]);
 
-    const handleParamChange = (paramName: keyof TransparencyOptions, value: string) => {
-        setParams(prev => ({ ...prev, [paramName]: Number(value) }));
+    const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+        const target = event.currentTarget;
+        setImageDims({
+            width: target.naturalWidth,
+            height: target.naturalHeight,
+        });
+    };
+
+    const handlePreviewClick = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (isProcessing || !imgRef.current || !sticker.originalImageUrl) {
+            return;
+        }
+        const imgRect = imgRef.current.getBoundingClientRect();
+        if (
+            event.clientX < imgRect.left ||
+            event.clientX > imgRect.right ||
+            event.clientY < imgRect.top ||
+            event.clientY > imgRect.bottom
+        ) {
+            return;
+        }
+        const relativeX = (event.clientX - imgRect.left) / imgRect.width;
+        const relativeY = (event.clientY - imgRect.top) / imgRect.height;
+        const x = relativeX * imgRef.current.naturalWidth;
+        const y = relativeY * imgRef.current.naturalHeight;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            return;
+        }
+        setSeedPoints(prev => [...prev, { x, y, force: true }]);
+    };
+
+    const handleUndo = () => {
+        setSeedPoints(prev => prev.slice(0, -1));
+    };
+
+    const handleResetSeeds = () => {
+        setSeedPoints([]);
     };
 
     const handleSave = () => {
@@ -493,39 +554,57 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
         }
     };
 
+    const seedStatus = seedPoints.length
+        ? t('transparencySeedCount', { count: seedPoints.length.toString() })
+        : t('transparencySeedNone');
+
     return (
         <div className="modal-backdrop" onClick={handleBackdropClick}>
             <div className="transparency-editor-modal" ref={modalContentRef}>
                 <h3>{t('transparencyTitle')}</h3>
                 <div className="editor-content">
                     <div className="editor-preview">
-                        <div className="checkerboard-bg">
+                        <div className="checkerboard-bg pick-mode" onClick={handlePreviewClick}>
                             {isProcessing && <div className="preview-spinner-overlay"><div className="spinner"></div></div>}
-                            <img src={previewUrl || ''} alt={`${displayLabel} preview`} />
+                            {previewUrl && (
+                                <>
+                                    <img
+                                        ref={imgRef}
+                                        src={previewUrl}
+                                        alt={`${displayLabel} preview`}
+                                        onLoad={handleImageLoad}
+                                    />
+                                    {imageDims && seedPoints.map((seed, index) => (
+                                        <span
+                                            key={`${seed.x}-${seed.y}-${index}`}
+                                            className="seed-marker"
+                                            style={{
+                                                left: `${(seed.x / imageDims.width) * 100}%`,
+                                                top: `${(seed.y / imageDims.height) * 100}%`,
+                                            }}
+                                        />
+                                    ))}
+                                </>
+                            )}
                         </div>
                     </div>
                     <div className="editor-controls">
-                        <div className="slider-control">
-                            <label htmlFor="colorTol">{t('colorToleranceLabel')} ({params.colorTol})</label>
-                            <input type="range" id="colorTol" min="4" max="24" value={params.colorTol} onChange={e => handleParamChange('colorTol', e.target.value)} />
+                        <p className="picker-description">{t('transparencyPickerInstructions')}</p>
+                        <p className="picker-status">{seedStatus}</p>
+                        <div className="picker-actions">
+                            <button type="button" className="picker-button" onClick={handleUndo} disabled={!seedPoints.length}>
+                                {t('transparencyUndo')}
+                            </button>
+                            <button type="button" className="picker-button" onClick={handleResetSeeds} disabled={!seedPoints.length}>
+                                {t('transparencyReset')}
+                            </button>
                         </div>
-                        <div className="slider-control">
-                            <label htmlFor="tileGuess">{t('tileSizeLabel')} ({params.tileGuess})</label>
-                            <input type="range" id="tileGuess" min="8" max="32" value={params.tileGuess} onChange={e => handleParamChange('tileGuess', e.target.value)} />
-                        </div>
-                        <div className="slider-control">
-                            <label htmlFor="gradKeep">{t('textureProtectionLabel')} ({params.gradKeep})</label>
-                            <input type="range" id="gradKeep" min="4" max="24" value={params.gradKeep} onChange={e => handleParamChange('gradKeep', e.target.value)} />
-                        </div>
-                        <div className="slider-control">
-                            <label htmlFor="feather">{t('edgeFeatherLabel')} ({params.feather})</label>
-                            <input type="range" id="feather" min="0" max="8" value={params.feather} onChange={e => handleParamChange('feather', e.target.value)} />
-                        </div>
+                        <p className="picker-hint">{t('transparencyPickerHint')}</p>
                     </div>
                 </div>
                 <div className="modal-actions">
                     <button onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
-                    <button onClick={handleSave} className="modal-button primary">{t('saveChangesButton')}</button>
+                    <button onClick={handleSave} className="modal-button primary" disabled={isProcessing}>{t('saveChangesButton')}</button>
                 </div>
             </div>
         </div>

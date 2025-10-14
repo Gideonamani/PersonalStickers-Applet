@@ -1,4 +1,4 @@
-import type { TransparencyOptions } from '../types';
+import type { TransparencyOptions, TransparencySeed } from '../types';
 
 type LabTuple = [number, number, number];
 type RGBTuple = [number, number, number];
@@ -86,6 +86,8 @@ export const makeBackgroundTransparent = async (
         tileGuess = 16,
         gradKeep = 10,
         feather = 2,
+        seedPoints = [],
+        mode = 'auto',
     } = opts;
 
     try {
@@ -121,6 +123,12 @@ export const makeBackgroundTransparent = async (
         }
 
         const samples: RGBTuple[] = [];
+        const normalizeSeed = ({ x, y, force }: TransparencySeed) => ({
+            x: Math.max(0, Math.min(width - 1, Math.round(x))),
+            y: Math.max(0, Math.min(height - 1, Math.round(y))),
+            force: force ?? true,
+        });
+        const seeds = (seedPoints ?? []).map(normalizeSeed);
         const addSample = (x: number, y: number) => {
             if (x < 0 || x >= width || y < 0 || y >= height) {
                 return;
@@ -130,18 +138,25 @@ export const makeBackgroundTransparent = async (
         };
 
         const edgeStep = Math.max(1, Math.floor(Math.min(width, height) / Math.max(8, tileGuess)));
-        for (let x = 0; x < width; x += edgeStep) {
-            addSample(x, 0);
-            addSample(x, height - 1);
+        if (mode !== 'seed') {
+            for (let x = 0; x < width; x += edgeStep) {
+                addSample(x, 0);
+                addSample(x, height - 1);
+            }
+            for (let y = 0; y < height; y += edgeStep) {
+                addSample(0, y);
+                addSample(width - 1, y);
+            }
+            addSample(0, 0);
+            addSample(width - 1, 0);
+            addSample(0, height - 1);
+            addSample(width - 1, height - 1);
         }
-        for (let y = 0; y < height; y += edgeStep) {
-            addSample(0, y);
-            addSample(width - 1, y);
+        for (const { x, y } of seeds) {
+            for (let i = 0; i < 4; i++) {
+                addSample(x, y);
+            }
         }
-        addSample(0, 0);
-        addSample(width - 1, 0);
-        addSample(0, height - 1);
-        addSample(width - 1, height - 1);
 
         if (samples.length === 0) {
             return imageUrl;
@@ -185,6 +200,23 @@ export const makeBackgroundTransparent = async (
 
         clusters.sort((a, b) => b.count - a.count);
         const bgClusters = clusters.slice(0, Math.min(2, clusters.length));
+        if (bgClusters.length < 2) {
+            for (const seed of seeds) {
+                const offset = (seed.y * width + seed.x) * 4;
+                const lab = rgbToLab(data[offset], data[offset + 1], data[offset + 2]);
+                const closest = bgClusters.find((cluster) => distLab(lab[0], lab[1], lab[2], cluster.lab) < 2);
+                if (!closest) {
+                    bgClusters.push({
+                        lab,
+                        rgb: [data[offset], data[offset + 1], data[offset + 2]],
+                        count: 1,
+                    });
+                    if (bgClusters.length >= 2) {
+                        break;
+                    }
+                }
+            }
+        }
         if (bgClusters.length === 0) {
             return imageUrl;
         }
@@ -245,6 +277,9 @@ export const makeBackgroundTransparent = async (
         let head = 0;
         let tail = 0;
 
+        const useAuto = mode !== 'seed';
+        const useSeeds = seeds.length > 0 && mode !== 'auto';
+
         const tryEnqueue = (x: number, y: number, force = false) => {
             if (x < 0 || x >= width || y < 0 || y >= height) {
                 return;
@@ -267,13 +302,20 @@ export const makeBackgroundTransparent = async (
             tail++;
         };
 
-        for (let x = 0; x < width; x += edgeStep) {
-            tryEnqueue(x, 0, true);
-            tryEnqueue(x, height - 1, true);
+        if (useAuto) {
+            for (let x = 0; x < width; x += edgeStep) {
+                tryEnqueue(x, 0, true);
+                tryEnqueue(x, height - 1, true);
+            }
+            for (let y = 0; y < height; y += edgeStep) {
+                tryEnqueue(0, y, true);
+                tryEnqueue(width - 1, y, true);
+            }
         }
-        for (let y = 0; y < height; y += edgeStep) {
-            tryEnqueue(0, y, true);
-            tryEnqueue(width - 1, y, true);
+        if (useSeeds) {
+            for (const seed of seeds) {
+                tryEnqueue(seed.x, seed.y, seed.force);
+            }
         }
 
         const neighbours = [
