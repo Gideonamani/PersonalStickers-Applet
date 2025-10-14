@@ -1,4 +1,5 @@
 import type { TransparencyOptions, TransparencySeed } from '../types';
+import { MAX_STICKER_DIMENSION } from './image';
 
 type LabTuple = [number, number, number];
 type RGBTuple = [number, number, number];
@@ -88,19 +89,32 @@ export const makeBackgroundTransparent = async (
         feather = 2,
         seedPoints = [],
         mode = 'auto',
+        maxDimension = MAX_STICKER_DIMENSION,
     } = opts;
 
     try {
         const img = await loadImage(imageUrl);
 
         const canvas = document.createElement('canvas');
-        const width = (canvas.width = img.width);
-        const height = (canvas.height = img.height);
+        const largestSide = Math.max(img.width, img.height);
+        let width = img.width;
+        let height = img.height;
+
+        if (maxDimension && largestSide > maxDimension) {
+            const scale = maxDimension / largestSide;
+            width = Math.max(1, Math.round(img.width * scale));
+            height = Math.max(1, Math.round(img.height * scale));
+        }
+
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) {
             throw new Error('Could not get canvas context');
         }
-        ctx.drawImage(img, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
 
         const imgData = ctx.getImageData(0, 0, width, height);
         const data = imgData.data;
