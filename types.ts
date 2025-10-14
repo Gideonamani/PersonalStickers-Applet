@@ -10,17 +10,9 @@ export type Expression = {
     isDefault: boolean;
 };
 
-export type ImageAsset = {
-    blob: Blob;
-    objectUrl: string;
-    width: number;
-    height: number;
-    byteSize: number;
-};
-
 export type Sticker = Expression & {
-    image: ImageAsset | null; // The final image to display/download
-    originalImage: ImageAsset | null; // The raw image from the AI, for reprocessing
+    imageUrl: string | null; // The final image to display/download
+    originalImageUrl: string | null; // The raw image from the AI, for reprocessing
     status: StickerStatus;
 };
 

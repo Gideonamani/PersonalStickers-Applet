@@ -6,26 +6,11 @@ type RGBTuple = [number, number, number];
 const loadImage = (src: string): Promise<HTMLImageElement> =>
     new Promise((resolve, reject) => {
         const image = new Image();
+        image.crossOrigin = 'anonymous';
         image.onload = () => resolve(image);
         image.onerror = () => reject(new Error('Image failed to load'));
         image.src = src;
     });
-
-const canvasToBlob = (canvas: HTMLCanvasElement, type = 'image/png'): Promise<Blob> =>
-    new Promise((resolve, reject) => {
-        canvas.toBlob(blob => {
-            if (blob) {
-                resolve(blob);
-            } else {
-                reject(new Error('Could not export canvas to blob'));
-            }
-        }, type);
-    });
-
-const getOriginalBlob = async (imageUrl: string): Promise<Blob> => {
-    const response = await fetch(imageUrl);
-    return await response.blob();
-};
 
 const srgbToLinear = (value: number) =>
     value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
@@ -95,7 +80,7 @@ const applyFeather = (mask: Float32Array, width: number, height: number, radius:
 export const makeBackgroundTransparent = async (
     imageUrl: string,
     opts: Partial<TransparencyOptions> = {},
-): Promise<Blob> => {
+): Promise<string> => {
     const {
         colorTol = 10,
         tileGuess = 16,
@@ -174,7 +159,7 @@ export const makeBackgroundTransparent = async (
         }
 
         if (samples.length === 0) {
-            return await getOriginalBlob(imageUrl);
+            return imageUrl;
         }
 
         type Cluster = { lab: LabTuple; rgb: RGBTuple; count: number };
@@ -233,7 +218,7 @@ export const makeBackgroundTransparent = async (
             }
         }
         if (bgClusters.length === 0) {
-            return await getOriginalBlob(imageUrl);
+            return imageUrl;
         }
 
         const bgLabs = bgClusters.map((cluster) => cluster.lab);
@@ -364,14 +349,9 @@ export const makeBackgroundTransparent = async (
         }
 
         ctx.putImageData(imgData, 0, 0);
-        return await canvasToBlob(canvas, 'image/png');
+        return canvas.toDataURL('image/png');
     } catch (error) {
         console.error('Error processing image for transparency:', error);
-        try {
-            return await getOriginalBlob(imageUrl);
-        } catch (fallbackError) {
-            console.error('Failed to fall back to original image blob:', fallbackError);
-            throw error;
-        }
+        return imageUrl;
     }
 };

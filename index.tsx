@@ -9,7 +9,7 @@ import JSZip from 'jszip';
 import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
 
 import { 
-    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize, TransparencySeed, ImageAsset 
+    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize, TransparencySeed 
 } from './types';
 import { 
     DownloadIcon, BinIcon, EditIcon, RefreshIcon, AddIcon, CameraIcon, 
@@ -93,143 +93,15 @@ const POPULAR_EMOJIS = [
 ];
 
 // --- Helper Functions ---
-const MAX_IMAGE_DIMENSION = 512;
+const dataUrlToBase64 = (dataUrl: string) => dataUrl.split(',')[1];
 
-type ScaledImage = {
-  blob: Blob;
-  width: number;
-  height: number;
-  byteSize?: number;
-};
-
-const blobToBase64 = (blob: Blob): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        const parts = reader.result.split(',');
-        if (parts.length === 2 && parts[1]) {
-          resolve(parts[1]);
-        } else {
-          reject(new Error('Unexpected data URL format while converting blob to base64'));
-        }
-      } else {
-        reject(new Error('Failed to convert blob to base64'));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
-    reader.readAsDataURL(blob);
-  });
-
-const base64ToBlob = (base64: string, mimeType: string): Blob => {
-  const binary = atob(base64);
-  const length = binary.length;
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: mimeType });
-};
-
-const dataUrlToBlob = (dataUrl: string): Blob => {
-  const [header, base64] = dataUrl.split(',');
-  const mimeMatch = header.match(/data:(.*);base64/);
-  const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-  return base64ToBlob(base64 ?? '', mimeType);
-};
-
-const createImageAsset = (blob: Blob, width: number, height: number): ImageAsset => ({
-  blob,
-  objectUrl: URL.createObjectURL(blob),
-  width,
-  height,
-  byteSize: blob.size,
-});
-
-const revokeImageAsset = (asset?: ImageAsset | null, seen?: Set<string>) => {
-  if (!asset) {
-    return;
-  }
-  if (seen) {
-    if (seen.has(asset.objectUrl)) {
-      return;
-    }
-    seen.add(asset.objectUrl);
-  }
-  URL.revokeObjectURL(asset.objectUrl);
-};
-
-const flushStickerAssets = (stickers: Sticker[]) => {
-  const seen = new Set<string>();
-  stickers.forEach(sticker => {
-    revokeImageAsset(sticker.image, seen);
-    revokeImageAsset(sticker.originalImage, seen);
-  });
-};
-
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-};
-
-const describeAsset = (asset: ImageAsset) =>
-  `${asset.width}×${asset.height}px • ${formatFileSize(asset.byteSize)}`;
-
-const downloadImageAsset = (asset: ImageAsset, filename: string) => {
+const downloadImage = (imageUrl: string, filename: string) => {
   const link = document.createElement('a');
-  link.href = asset.objectUrl;
+  link.href = imageUrl;
   link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-};
-
-const loadImageFromUrl = (url: string): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Image failed to load'));
-    image.src = url;
-  });
-
-const downscaleImageBlob = async (blob: Blob, maxDimension = MAX_IMAGE_DIMENSION): Promise<ScaledImage> => {
-  const tempUrl = URL.createObjectURL(blob);
-  try {
-    const image = await loadImageFromUrl(tempUrl);
-    const { width, height } = image;
-    if (!width || !height) {
-      throw new Error('Image has invalid dimensions');
-    }
-    if (Math.max(width, height) <= maxDimension) {
-      return { blob, width, height, byteSize: blob.size };
-    }
-    const scale = maxDimension / Math.max(width, height);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(width * scale);
-    canvas.height = Math.round(height * scale);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return { blob, width, height, byteSize: blob.size };
-    }
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const scaledBlob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(result => {
-        if (result) {
-          resolve(result);
-        } else {
-          reject(new Error('Failed to downscale image'));
-        }
-      }, 'image/png');
-    });
-    return { blob: scaledBlob, width: canvas.width, height: canvas.height, byteSize: scaledBlob.size };
-  } finally {
-    URL.revokeObjectURL(tempUrl);
-  }
 };
 
 const DEFAULT_TRANSPARENCY_OPTIONS: TransparencyOptions = {
@@ -360,7 +232,6 @@ const ImageCropper = ({
 
 const StickerCreator = ({
   characterImage,
-  characterMetadata,
   onRequestImage,
   onGenerate,
   isLoading,
@@ -373,7 +244,6 @@ const StickerCreator = ({
   onRestoreDefaults,
 }: {
   characterImage: string | null;
-  characterMetadata: ImageAsset | null;
   onRequestImage: () => void;
   onGenerate: () => void;
   isLoading: boolean;
@@ -387,7 +257,6 @@ const StickerCreator = ({
 }) => {
   const { t } = useLanguage();
   const [isDragging, setIsDragging] = useState(false);
-  const characterDetails = characterMetadata ? describeAsset(characterMetadata) : null;
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -424,12 +293,7 @@ const StickerCreator = ({
         tabIndex={0}
       >
         {characterImage ? (
-            <img
-              src={characterImage}
-              alt={`Uploaded character${characterDetails ? ` (${characterDetails})` : ''}`}
-              className="character-image"
-              title={characterDetails ?? undefined}
-            />
+            <img src={characterImage} alt="Uploaded character" className="character-image" />
         ) : (
             <div className="character-placeholder">
               <span>📷</span>
@@ -591,69 +455,43 @@ const AddExpressionModal = ({ type, onAdd, onClose }: { type: ExpressionType; on
     );
   };
 
-const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticker; onSave: (label: string, image: ScaledImage) => void; onClose: () => void; }) => {
+const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticker; onSave: (label: string, newImageUrl: string) => void; onClose: () => void; }) => {
     const { t } = useLanguage();
     const [seedPoints, setSeedPoints] = useState<TransparencySeed[]>([]);
+    const [previewUrl, setPreviewUrl] = useState(sticker.imageUrl);
     const [isProcessing, setIsProcessing] = useState(false);
     const [imageDims, setImageDims] = useState<{ width: number; height: number } | null>(null);
     const modalContentRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
     const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
-    const initialAsset = sticker.image ?? sticker.originalImage ?? null;
-    const [previewUrl, setPreviewUrl] = useState<string | null>(initialAsset?.objectUrl ?? null);
-    const latestImageRef = useRef<ScaledImage | null>(initialAsset ? { blob: initialAsset.blob, width: initialAsset.width, height: initialAsset.height, byteSize: initialAsset.byteSize } : null);
-    const ownedPreviewUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (ownedPreviewUrlRef.current) {
-            URL.revokeObjectURL(ownedPreviewUrlRef.current);
-            ownedPreviewUrlRef.current = null;
-        }
         setSeedPoints([]);
-        const asset = sticker.image ?? sticker.originalImage ?? null;
-        setPreviewUrl(asset?.objectUrl ?? null);
-        latestImageRef.current = asset ? { blob: asset.blob, width: asset.width, height: asset.height, byteSize: asset.byteSize } : null;
-        setImageDims(asset ? { width: asset.width, height: asset.height } : null);
-    }, [sticker]);
+        setPreviewUrl(sticker.imageUrl);
+        setImageDims(null);
+    }, [sticker.imageUrl, sticker.originalImageUrl, sticker.label]);
 
     useEffect(() => {
-        if (!sticker.originalImage) {
+        if (!sticker.originalImageUrl) {
             setIsProcessing(false);
             return;
         }
         let cancelled = false;
         setIsProcessing(true);
         const timer = window.setTimeout(() => {
-            makeBackgroundTransparent(sticker.originalImage.objectUrl, {
+            makeBackgroundTransparent(sticker.originalImageUrl!, {
                 ...DEFAULT_TRANSPARENCY_OPTIONS,
                 seedPoints,
                 mode: seedPoints.length ? 'auto+seed' : 'auto',
-            }).then(async newBlob => {
-                if (cancelled) {
-                    return;
+            }).then(newUrl => {
+                if (!cancelled) {
+                    setPreviewUrl(newUrl);
+                    setIsProcessing(false);
                 }
-                const scaled = await downscaleImageBlob(newBlob);
-                if (ownedPreviewUrlRef.current) {
-                    URL.revokeObjectURL(ownedPreviewUrlRef.current);
-                }
-                const url = URL.createObjectURL(scaled.blob);
-                ownedPreviewUrlRef.current = url;
-                latestImageRef.current = scaled;
-                setPreviewUrl(url);
-                setImageDims({ width: scaled.width, height: scaled.height });
-                setIsProcessing(false);
             }).catch(error => {
                 console.error('Error refining transparency:', error);
                 if (!cancelled) {
-                    if (ownedPreviewUrlRef.current) {
-                        URL.revokeObjectURL(ownedPreviewUrlRef.current);
-                        ownedPreviewUrlRef.current = null;
-                    }
-                    latestImageRef.current = sticker.originalImage
-                        ? { blob: sticker.originalImage.blob, width: sticker.originalImage.width, height: sticker.originalImage.height, byteSize: sticker.originalImage.byteSize }
-                        : null;
-                    setPreviewUrl(sticker.originalImage?.objectUrl ?? null);
-                    setImageDims(sticker.originalImage ? { width: sticker.originalImage.width, height: sticker.originalImage.height } : null);
+                    setPreviewUrl(sticker.originalImageUrl!);
                     setIsProcessing(false);
                 }
             });
@@ -663,16 +501,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [seedPoints, sticker.originalImage]);
-
-    useEffect(() => {
-        return () => {
-            if (ownedPreviewUrlRef.current) {
-                URL.revokeObjectURL(ownedPreviewUrlRef.current);
-                ownedPreviewUrlRef.current = null;
-            }
-        };
-    }, []);
+    }, [seedPoints, sticker.originalImageUrl]);
 
     const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
         const target = event.currentTarget;
@@ -683,7 +512,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
     };
 
     const handlePreviewClick = (event: React.MouseEvent<HTMLDivElement>) => {
-        if (isProcessing || !imgRef.current || !sticker.originalImage) {
+        if (isProcessing || !imgRef.current || !sticker.originalImageUrl) {
             return;
         }
         const imgRect = imgRef.current.getBoundingClientRect();
@@ -714,15 +543,8 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
     };
 
     const handleSave = () => {
-        if (latestImageRef.current) {
-            onSave(sticker.label, latestImageRef.current);
-        } else if (sticker.originalImage) {
-            onSave(sticker.label, {
-                blob: sticker.originalImage.blob,
-                width: sticker.originalImage.width,
-                height: sticker.originalImage.height,
-                byteSize: sticker.originalImage.byteSize,
-            });
+        if (previewUrl) {
+            onSave(sticker.label, previewUrl);
         }
     };
     
@@ -952,18 +774,12 @@ const ImageSourceModal = ({ onSelectFile, onSelectCamera, onClose }: { onSelectF
 const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
     const { t } = useLanguage();
     const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
-    const assetForDetails = sticker.image ?? sticker.originalImage ?? null;
-    const assetDetails = assetForDetails ? describeAsset(assetForDetails) : null;
-    const downloadLabel = assetDetails
-        ? `${t('downloadTooltip')} ${displayLabel} (${assetDetails})`
-        : `${t('downloadTooltip')} ${displayLabel}`;
 
     const handleDownload = () => {
-        const assetToDownload = sticker.image ?? sticker.originalImage;
-        if (assetToDownload) {
+        if (sticker.imageUrl) {
           const prefix = originalFilename ? originalFilename.split('.').slice(0, -1).join('.') : 'sticker';
           const stickerName = displayLabel.replace(/\s+/g, '_');
-          downloadImageAsset(assetToDownload, `${prefix}_${stickerName}.png`);
+          downloadImage(sticker.imageUrl, `${prefix}_${stickerName}.png`);
         }
     };
     
@@ -973,12 +789,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
         switch (sticker.status) {
             case 'loading':
                 return <div className="spinner"></div>;
-            case 'done': {
-                const assetToShow = sticker.image ?? sticker.originalImage;
-                return assetToShow ? (
-                    <img src={assetToShow.objectUrl} alt={displayLabel} className="sticker-image" />
-                ) : null;
-            }
+            case 'done':
+                return <img src={sticker.imageUrl!} alt={displayLabel} className="sticker-image" />;
             case 'error':
                 return <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>;
             case 'idle':
@@ -995,10 +807,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
         }
     };
 
-    const hasAssetToDownload = !!(sticker.image ?? sticker.originalImage);
-
     return (
-    <div className="sticker-item" title={assetDetails ?? undefined}>
+    <div className="sticker-item">
         {canInteract && (
             <div className="sticker-item-actions">
                 {(sticker.status === 'done' || sticker.status === 'error') && (
@@ -1011,7 +821,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                         <RefreshIcon />
                     </button>
                 )}
-                {sticker.status === 'done' && sticker.originalImage && (
+                {sticker.status === 'done' && sticker.originalImageUrl && (
                      <button
                         className="sticker-action-btn edit-btn"
                         onClick={() => onEdit(sticker)}
@@ -1035,13 +845,8 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
             {renderContent()}
             <div className="sticker-label">
                 <span>{displayLabel}</span>
-                {hasAssetToDownload && sticker.status === 'done' && (
-                <button
-                    onClick={handleDownload}
-                    className="download-button"
-                    aria-label={downloadLabel}
-                    title={downloadLabel}
-                >
+                {sticker.imageUrl && sticker.status === 'done' && (
+                <button onClick={handleDownload} className="download-button" aria-label={`${t('downloadTooltip')} ${displayLabel}`}>
                     <DownloadIcon />
                 </button>
                 )}
@@ -1096,12 +901,6 @@ const Footer = () => (
     </footer>
   );
 
-type ExplainerStep = {
-    title: string;
-    p: string;
-    image?: string;
-};
-
 const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const { t } = useLanguage();
     const [activeStep, setActiveStep] = useState(0);
@@ -1116,8 +915,8 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const stepsData: ExplainerStep[] = [
-        { title: 'step1Title', p: 'step1P' },
+    const stepsData = [
+        { title: 'step1Title', p: 'step1P', image: Numbuh4 },
         { title: 'step2Title', p: 'step2P' },
         { title: 'step3Title', p: 'step3P' },
         { title: 'step4Title', p: 'step4P' },
@@ -1185,7 +984,9 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                             {t('getStartedButton')}
                         </button>
                     </div>
-                    <div className="intro-image-container" aria-hidden="true"></div>
+                    <div className="intro-image-container">
+                        <img src={Numbuh4} alt={t('explainerIntroTitle')} className="hero-image-preview" />
+                    </div>
                 </div>
             </section>
 
@@ -1274,7 +1075,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   ], []);
 
   const [expressions, setExpressions] = useState<Expression[]>([]);
-  const [userImage, setUserImage] = useState<ImageAsset | null>(null);
+  const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -1334,26 +1135,6 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     }
   }, [isReady, isInitialized, getInitialExpressions]);
 
-  // Load sample image for new sessions
-  useEffect(() => {
-    const loadSampleImage = async () => {
-        try {
-            const blob = dataUrlToBlob(Numbuh4);
-            const scaled = await downscaleImageBlob(blob);
-            const asset = createImageAsset(scaled.blob, scaled.width, scaled.height);
-            setUserImage(asset);
-            setOriginalFilename('numbuh4-sample.jpg');
-        } catch (err) {
-            console.error("Failed to load sample image", err);
-            // Fail gracefully if the sample image can't be loaded
-        }
-    };
-
-    if (isInitialized && !userImage && !originalFilename) {
-        loadSampleImage();
-    }
-  }, [isInitialized, userImage, originalFilename]);
-
   // Save state to localStorage whenever settings or expressions change
   useEffect(() => {
     if (!isInitialized) {
@@ -1384,26 +1165,11 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   useEffect(() => {
     setStickers(prevStickers => {
-      const nextLabels = new Set(expressions.map(e => e.label));
-      prevStickers.forEach(sticker => {
-        if (!nextLabels.has(sticker.label)) {
-          revokeImageAsset(sticker.image);
-          revokeImageAsset(sticker.originalImage);
-        }
-      });
-      return expressions.map(exp => {
+      const newStickers = expressions.map(exp => {
         const existingSticker = prevStickers.find(s => s.label === exp.label);
-        if (existingSticker) {
-          return {
-            ...existingSticker,
-            emoji: exp.emoji,
-            label: exp.label,
-            type: exp.type,
-            isDefault: exp.isDefault,
-          };
-        }
-        return { ...exp, image: null, originalImage: null, status: 'idle' as const };
+        return existingSticker || { ...exp, imageUrl: null, originalImageUrl: null, status: 'idle' as const };
       });
+      return newStickers.filter(s => expressions.some(e => e.label === s.label));
     });
   }, [expressions]);
 
@@ -1482,28 +1248,14 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     setCropModalOpen(true);
   };
 
-  const handleCropSave = async (croppedImageDataUrl: string) => {
-    try {
-      const blob = dataUrlToBlob(croppedImageDataUrl);
-      const scaledBlob = await downscaleImageBlob(blob);
-      setUserImage(prev => {
-        if (prev) {
-          revokeImageAsset(prev);
-        }
-        return createImageAsset(scaledBlob.blob, scaledBlob.width, scaledBlob.height);
-      });
-      setStickers(prev => {
-        flushStickerAssets(prev);
-        return expressions.map(e => ({ ...e, image: null, originalImage: null, status: 'idle' as const }));
-      });
-      setError(null);
-    } catch (err) {
-      console.error('Failed to process cropped image', err);
-      setError(t('errorInvalidFile'));
-    } finally {
-      setCropModalOpen(false);
-      setImageToCrop(null);
-    }
+  const handleCropSave = (croppedImageDataUrl: string) => {
+    setUserImage({
+      data: croppedImageDataUrl,
+      mimeType: 'image/png',
+    });
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+    setError(null);
+    setCropModalOpen(false);
   };
 
   const handleCropCancel = () => {
@@ -1511,24 +1263,9 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     setImageToCrop(null);
   };
 
-  const handleSaveTransparency = (label: string, newImage: ScaledImage) => {
-    const nextAsset = createImageAsset(newImage.blob, newImage.width, newImage.height);
-    let applied = false;
-    setStickers(prev => prev.map(s => {
-      if (s.label !== label) {
-        return s;
-      }
-      applied = true;
-      if (s.image && s.image !== s.originalImage) {
-        revokeImageAsset(s.image);
-      }
-      return { ...s, image: nextAsset, status: 'done' as const };
-    }));
-    if (applied) {
-      setEditingSticker(null);
-    } else {
-      revokeImageAsset(nextAsset);
-    }
+  const handleSaveTransparency = (label: string, newImageUrl: string) => {
+    setStickers(prev => prev.map(s => s.label === label ? { ...s, imageUrl: newImageUrl } : s));
+    setEditingSticker(null);
   };
 
 
@@ -1537,7 +1274,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
     setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
     
-    const sourceImage = { data: await blobToBase64(userImage.blob), mimeType: userImage.blob.type || 'image/png' };
+    const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
     
     try {
         const prompt = generatePrompt(expression, artisticStyle, transparentBackground, backgroundColor, translations);
@@ -1550,47 +1287,17 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (imagePart?.inlineData) {
-            const mimeType = imagePart.inlineData.mimeType || 'image/png';
-            const originalBlob = base64ToBlob(imagePart.inlineData.data, mimeType);
-            const scaledOriginalBlob = await downscaleImageBlob(originalBlob);
-            const originalAsset = createImageAsset(scaledOriginalBlob.blob, scaledOriginalBlob.width, scaledOriginalBlob.height);
-
-            let processedAsset: ImageAsset = originalAsset;
-            let processedIsDistinct = false;
+            const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+            let processedImageUrl = originalImageUrl;
+            
             if (transparentBackground) {
                 try {
-                    const transparentBlob = await makeBackgroundTransparent(originalAsset.objectUrl, DEFAULT_TRANSPARENCY_OPTIONS);
-                    const scaledTransparentBlob = await downscaleImageBlob(transparentBlob);
-                    processedAsset = createImageAsset(scaledTransparentBlob.blob, scaledTransparentBlob.width, scaledTransparentBlob.height);
-                    processedIsDistinct = true;
+                    processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
                 } catch (processError) {
                     console.warn(`Could not process image for transparency, falling back to original.`, processError);
-                    processedAsset = originalAsset;
-                    processedIsDistinct = false;
                 }
             }
-
-            let applied = false;
-            setStickers(prev => prev.map(s => {
-                if (s.label !== expression.label) {
-                    return s;
-                }
-                applied = true;
-                if (s.image && s.image !== s.originalImage) {
-                    revokeImageAsset(s.image);
-                }
-                if (s.originalImage && s.originalImage !== originalAsset) {
-                    revokeImageAsset(s.originalImage);
-                }
-                return { ...s, image: processedAsset, originalImage: originalAsset, status: 'done' as const };
-            }));
-
-            if (!applied) {
-                revokeImageAsset(originalAsset);
-                if (processedIsDistinct) {
-                    revokeImageAsset(processedAsset);
-                }
-            }
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl, status: 'done' as const } : s));
         } else {
             console.warn(`No image generated for: ${expression.label}`);
             setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
@@ -1607,10 +1314,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     
     setIsLoading(true);
     setError(null);
-    setStickers(prev => {
-      flushStickerAssets(prev);
-      return expressions.map(e => ({ ...e, image: null, originalImage: null, status: 'idle' as const }));
-    });
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
 
     try {
       for (const expression of expressions) {
@@ -1636,7 +1340,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   const handleDownloadAll = () => {
     const zip = new JSZip();
-    const generatedStickers = stickers.filter(s => s.image && s.status === 'done');
+    const generatedStickers = stickers.filter(s => s.imageUrl && s.status === 'done');
 
     if (generatedStickers.length === 0) return;
 
@@ -1644,8 +1348,9 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
     generatedStickers.forEach(sticker => {
       const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
+      const base64Data = dataUrlToBase64(sticker.imageUrl!);
       const filename = `${prefix}_${displayLabel.replace(/\s+/g, '_')}.png`;
-      zip.file(filename, sticker.image!.blob);
+      zip.file(filename, base64Data, { base64: true });
     });
 
     zip.generateAsync({ type: 'blob' }).then(content => {
@@ -1666,14 +1371,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       
       const defaults = getInitialExpressions();
       setExpressions(defaults);
-      setStickers(prev => {
-        flushStickerAssets(prev);
-        return defaults.map(e => ({ ...e, image: null, originalImage: null, status: 'idle' as const }));
-      });
+      setStickers(defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
 
-      if (userImage) {
-        revokeImageAsset(userImage);
-      }
       setUserImage(null);
       setOriginalFilename(null);
       setIsLoading(false);
@@ -1689,8 +1388,8 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     }
   };
 
-  const characterImage = userImage?.objectUrl || null;
-  const hasGeneratedStickers = stickers.some(s => s.image);
+  const characterImage = userImage?.data || null;
+  const hasGeneratedStickers = stickers.some(s => s.imageUrl);
   const hasGenerationStarted = stickers.some(s => s.status !== 'idle');
 
   return (
@@ -1750,7 +1449,6 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
         <StickerCreator
           characterImage={characterImage}
-          characterMetadata={userImage}
           onRequestImage={() => setSourceModalOpen(true)}
           onGenerate={handleGenerate}
           isLoading={isLoading}
