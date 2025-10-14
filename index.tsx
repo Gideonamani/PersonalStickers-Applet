@@ -18,6 +18,7 @@ import {
 import { makeBackgroundTransparent } from './utils/transparency';
 import { generatePrompt } from './utils/prompt-generator';
 import { Numbuh4 } from './sample-image-data';
+import { normalizeImageSize, MAX_STICKER_DIMENSION, dataUrlToBlob } from './utils/image';
 
 import './index.css';
 
@@ -195,7 +196,8 @@ const ImageCropper = ({
             completedCrop.height
           );
           const base64Image = canvas.toDataURL('image/png');
-          onSave(base64Image);
+          const { dataUrl } = await normalizeImageSize(base64Image, MAX_STICKER_DIMENSION);
+          onSave(dataUrl);
         }
       }
     };
@@ -483,6 +485,7 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
                 ...DEFAULT_TRANSPARENCY_OPTIONS,
                 seedPoints,
                 mode: seedPoints.length ? 'auto+seed' : 'auto',
+                maxDimension: MAX_STICKER_DIMENSION,
             }).then(newUrl => {
                 if (!cancelled) {
                     setPreviewUrl(newUrl);
@@ -1287,17 +1290,22 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (imagePart?.inlineData) {
-            const originalImageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-            let processedImageUrl = originalImageUrl;
-            
+            const baseMime = imagePart.inlineData.mimeType || 'image/png';
+            const rawImageUrl = `data:${baseMime};base64,${imagePart.inlineData.data}`;
+            const { dataUrl: constrainedOriginal } = await normalizeImageSize(rawImageUrl, MAX_STICKER_DIMENSION);
+            let processedImageUrl = constrainedOriginal;
+
             if (transparentBackground) {
                 try {
-                    processedImageUrl = await makeBackgroundTransparent(originalImageUrl);
+                    processedImageUrl = await makeBackgroundTransparent(constrainedOriginal, {
+                        ...DEFAULT_TRANSPARENCY_OPTIONS,
+                        maxDimension: MAX_STICKER_DIMENSION,
+                    });
                 } catch (processError) {
                     console.warn(`Could not process image for transparency, falling back to original.`, processError);
                 }
             }
-            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl, status: 'done' as const } : s));
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl: constrainedOriginal, status: 'done' as const } : s));
         } else {
             console.warn(`No image generated for: ${expression.label}`);
             setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
@@ -1348,9 +1356,9 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
     generatedStickers.forEach(sticker => {
       const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
-      const base64Data = dataUrlToBase64(sticker.imageUrl!);
       const filename = `${prefix}_${displayLabel.replace(/\s+/g, '_')}.png`;
-      zip.file(filename, base64Data, { base64: true });
+      const blob = dataUrlToBlob(sticker.imageUrl!);
+      zip.file(filename, blob);
     });
 
     zip.generateAsync({ type: 'blob' }).then(content => {

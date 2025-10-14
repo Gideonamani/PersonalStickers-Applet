@@ -23,6 +23,7 @@ export type TransparencyOptions = {
     feather: number;
     seedPoints?: TransparencySeed[];
     mode?: 'auto' | 'seed' | 'auto+seed';
+    maxDimension?: number;
 };
 
 export type GridSize = 'small' | 'medium' | 'large';
