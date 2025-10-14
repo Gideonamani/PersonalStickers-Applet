@@ -555,24 +555,65 @@ main {
 }
 
 .editor-controls {
-    flex: 1 1 300px;
+    flex: 1 1 280px;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    justify-content: center;
+    gap: 1rem;
+    justify-content: flex-start;
 }
-.slider-control {
-    display: flex;
-    flex-direction: column;
+
+.checkerboard-bg.pick-mode {
+    cursor: crosshair;
 }
-.slider-control label {
-    margin-bottom: 0.5rem;
+
+.seed-marker {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: #ff6b6b;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.picker-description,
+.picker-hint {
+    font-size: 0.95rem;
     color: #333;
-    font-weight: 500;
 }
-.slider-control input[type="range"] {
-    width: 100%;
+
+.picker-status {
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.picker-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.picker-button {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid #d0d0d0;
+    background: #f7f7f7;
+    color: #333;
+    font-size: 0.9rem;
     cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.picker-button:hover:not(:disabled) {
+    background: #ebebeb;
+    border-color: #c0c0c0;
+}
+
+.picker-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 
@@ -699,26 +740,13 @@ main {
     cursor: pointer;
 }
 
-.background-options-wrapper {
-    margin-bottom: 1.5rem;
-}
-
 .background-controls {
     display: flex;
     align-items: center;
     gap: 1rem;
+    margin-bottom: 1.5rem;
     padding: 0.75rem;
     border-radius: 4px;
-}
-
-.background-controls.sub-option {
-    padding-left: 3rem;
-    padding-top: 0;
-}
-
-.background-controls.sub-option label {
-    color: #555;
-    font-size: 0.9rem;
 }
 
 .background-controls label {

@@ -1,4 +1,4 @@
-import type { TransparencyOptions } from '../types';
+import type { TransparencyOptions, TransparencySeed } from '../types';
 
 type LabTuple = [number, number, number];
 type RGBTuple = [number, number, number];
@@ -6,11 +6,26 @@ type RGBTuple = [number, number, number];
 const loadImage = (src: string): Promise<HTMLImageElement> =>
     new Promise((resolve, reject) => {
         const image = new Image();
-        image.crossOrigin = 'anonymous';
         image.onload = () => resolve(image);
         image.onerror = () => reject(new Error('Image failed to load'));
         image.src = src;
     });
+
+const canvasToBlob = (canvas: HTMLCanvasElement, type = 'image/png'): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+            if (blob) {
+                resolve(blob);
+            } else {
+                reject(new Error('Could not export canvas to blob'));
+            }
+        }, type);
+    });
+
+const getOriginalBlob = async (imageUrl: string): Promise<Blob> => {
+    const response = await fetch(imageUrl);
+    return await response.blob();
+};
 
 const srgbToLinear = (value: number) =>
     value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
@@ -80,12 +95,14 @@ const applyFeather = (mask: Float32Array, width: number, height: number, radius:
 export const makeBackgroundTransparent = async (
     imageUrl: string,
     opts: Partial<TransparencyOptions> = {},
-): Promise<string> => {
+): Promise<Blob> => {
     const {
         colorTol = 10,
         tileGuess = 16,
         gradKeep = 10,
         feather = 2,
+        seedPoints = [],
+        mode = 'auto',
     } = opts;
 
     try {
@@ -121,6 +138,12 @@ export const makeBackgroundTransparent = async (
         }
 
         const samples: RGBTuple[] = [];
+        const normalizeSeed = ({ x, y, force }: TransparencySeed) => ({
+            x: Math.max(0, Math.min(width - 1, Math.round(x))),
+            y: Math.max(0, Math.min(height - 1, Math.round(y))),
+            force: force ?? true,
+        });
+        const seeds = (seedPoints ?? []).map(normalizeSeed);
         const addSample = (x: number, y: number) => {
             if (x < 0 || x >= width || y < 0 || y >= height) {
                 return;
@@ -130,21 +153,28 @@ export const makeBackgroundTransparent = async (
         };
 
         const edgeStep = Math.max(1, Math.floor(Math.min(width, height) / Math.max(8, tileGuess)));
-        for (let x = 0; x < width; x += edgeStep) {
-            addSample(x, 0);
-            addSample(x, height - 1);
+        if (mode !== 'seed') {
+            for (let x = 0; x < width; x += edgeStep) {
+                addSample(x, 0);
+                addSample(x, height - 1);
+            }
+            for (let y = 0; y < height; y += edgeStep) {
+                addSample(0, y);
+                addSample(width - 1, y);
+            }
+            addSample(0, 0);
+            addSample(width - 1, 0);
+            addSample(0, height - 1);
+            addSample(width - 1, height - 1);
         }
-        for (let y = 0; y < height; y += edgeStep) {
-            addSample(0, y);
-            addSample(width - 1, y);
+        for (const { x, y } of seeds) {
+            for (let i = 0; i < 4; i++) {
+                addSample(x, y);
+            }
         }
-        addSample(0, 0);
-        addSample(width - 1, 0);
-        addSample(0, height - 1);
-        addSample(width - 1, height - 1);
 
         if (samples.length === 0) {
-            return imageUrl;
+            return await getOriginalBlob(imageUrl);
         }
 
         type Cluster = { lab: LabTuple; rgb: RGBTuple; count: number };
@@ -185,8 +215,25 @@ export const makeBackgroundTransparent = async (
 
         clusters.sort((a, b) => b.count - a.count);
         const bgClusters = clusters.slice(0, Math.min(2, clusters.length));
+        if (bgClusters.length < 2) {
+            for (const seed of seeds) {
+                const offset = (seed.y * width + seed.x) * 4;
+                const lab = rgbToLab(data[offset], data[offset + 1], data[offset + 2]);
+                const closest = bgClusters.find((cluster) => distLab(lab[0], lab[1], lab[2], cluster.lab) < 2);
+                if (!closest) {
+                    bgClusters.push({
+                        lab,
+                        rgb: [data[offset], data[offset + 1], data[offset + 2]],
+                        count: 1,
+                    });
+                    if (bgClusters.length >= 2) {
+                        break;
+                    }
+                }
+            }
+        }
         if (bgClusters.length === 0) {
-            return imageUrl;
+            return await getOriginalBlob(imageUrl);
         }
 
         const bgLabs = bgClusters.map((cluster) => cluster.lab);
@@ -245,6 +292,9 @@ export const makeBackgroundTransparent = async (
         let head = 0;
         let tail = 0;
 
+        const useAuto = mode !== 'seed';
+        const useSeeds = seeds.length > 0 && mode !== 'auto';
+
         const tryEnqueue = (x: number, y: number, force = false) => {
             if (x < 0 || x >= width || y < 0 || y >= height) {
                 return;
@@ -267,13 +317,20 @@ export const makeBackgroundTransparent = async (
             tail++;
         };
 
-        for (let x = 0; x < width; x += edgeStep) {
-            tryEnqueue(x, 0, true);
-            tryEnqueue(x, height - 1, true);
+        if (useAuto) {
+            for (let x = 0; x < width; x += edgeStep) {
+                tryEnqueue(x, 0, true);
+                tryEnqueue(x, height - 1, true);
+            }
+            for (let y = 0; y < height; y += edgeStep) {
+                tryEnqueue(0, y, true);
+                tryEnqueue(width - 1, y, true);
+            }
         }
-        for (let y = 0; y < height; y += edgeStep) {
-            tryEnqueue(0, y, true);
-            tryEnqueue(width - 1, y, true);
+        if (useSeeds) {
+            for (const seed of seeds) {
+                tryEnqueue(seed.x, seed.y, seed.force);
+            }
         }
 
         const neighbours = [
@@ -307,9 +364,14 @@ export const makeBackgroundTransparent = async (
         }
 
         ctx.putImageData(imgData, 0, 0);
-        return canvas.toDataURL('image/png');
+        return await canvasToBlob(canvas, 'image/png');
     } catch (error) {
         console.error('Error processing image for transparency:', error);
-        return imageUrl;
+        try {
+            return await getOriginalBlob(imageUrl);
+        } catch (fallbackError) {
+            console.error('Failed to fall back to original image blob:', fallbackError);
+            throw error;
+        }
     }
 };
