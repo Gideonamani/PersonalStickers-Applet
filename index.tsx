@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, ChangeEvent, useRef, useEffect, createContext, useContext, useCallback } from 'react';
+import React, { useState, ChangeEvent, useRef, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Modality } from '@google/genai';
 import JSZip from 'jszip';
@@ -20,6 +20,27 @@ import { generatePrompt } from './utils/prompt-generator';
 import { normalizeImageSize, MAX_STICKER_DIMENSION, dataUrlToBlob } from './utils/image';
 
 import './index.css';
+
+type HeroFrameSource = {
+    id: string;
+    labelKey: string;
+    fallbackLabel: string;
+    file: string;
+};
+
+type HeroFrame = HeroFrameSource & {
+    url: string;
+};
+
+const HERO_SOURCE_FILES: HeroFrameSource[] = [
+    { id: 'model0', labelKey: 'heroOriginalCaption', fallbackLabel: 'Original upload', file: 'Model_0.png' },
+    { id: 'model1', labelKey: 'heroVariantHappy', fallbackLabel: 'Happy sticker', file: 'Model_1.png' },
+    { id: 'model2', labelKey: 'heroVariantSurprised', fallbackLabel: 'Surprised sticker', file: 'Model_2.png' },
+    { id: 'model3', labelKey: 'heroVariantCool', fallbackLabel: 'Cool sticker', file: 'Model_3.png' },
+    { id: 'model4', labelKey: 'heroVariantLaugh', fallbackLabel: 'Laughing sticker', file: 'Model_4.png' },
+    { id: 'model5', labelKey: 'heroVariantFocused', fallbackLabel: 'Focused sticker', file: 'Model_5.png' },
+    { id: 'model6', labelKey: 'heroVariantDreamy', fallbackLabel: 'Dreamy sticker', file: 'Model_6.png' },
+];
 
 // --- Localization ---
 interface LanguageContextType {
@@ -82,6 +103,7 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
 // --- Asset Context ---
 interface AssetContextType {
     model0Url: string;
+    heroFrames: HeroFrame[];
 }
 
 const AssetContext = createContext<AssetContextType | undefined>(undefined);
@@ -96,26 +118,46 @@ const useAssets = () => {
 
 const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [model0Url, setModel0Url] = useState('');
+    const [heroFrames, setHeroFrames] = useState<HeroFrame[]>([]);
 
     useEffect(() => {
-        let objectUrl: string | null = null;
-        fetch('./assets/Model_0.png')
-            .then(res => res.blob())
-            .then(blob => {
-                objectUrl = URL.createObjectURL(blob);
-                setModel0Url(objectUrl);
-            })
-            .catch(err => console.error("Failed to load Model_0.png", err));
+        const objectUrls: string[] = [];
+        let cancelled = false;
+
+        const loadAssets = async () => {
+            try {
+                const loadedFrames = await Promise.all(
+                    HERO_SOURCE_FILES.map(async (source) => {
+                        const response = await fetch(`./assets/${source.file}`);
+                        if (!response.ok) {
+                            throw new Error(`Failed to load ${source.file}`);
+                        }
+                        const blob = await response.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        objectUrls.push(objectUrl);
+                        return { ...source, url: objectUrl };
+                    })
+                );
+
+                if (!cancelled) {
+                    setHeroFrames(loadedFrames);
+                    setModel0Url(loadedFrames[0]?.url ?? '');
+                }
+            } catch (error) {
+                console.error('Failed to load hero showcase assets', error);
+            }
+        };
+
+        loadAssets();
 
         return () => {
-            if (objectUrl) {
-                URL.revokeObjectURL(objectUrl);
-            }
+            cancelled = true;
+            objectUrls.forEach((url) => URL.revokeObjectURL(url));
         };
     }, []);
 
     return (
-        <AssetContext.Provider value={{ model0Url }}>
+        <AssetContext.Provider value={{ model0Url, heroFrames }}>
             {children}
         </AssetContext.Provider>
     );
@@ -948,7 +990,7 @@ const Footer = () => {
 
 const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const { t } = useLanguage();
-    const { model0Url } = useAssets();
+    const { model0Url, heroFrames } = useAssets();
     const [activeStep, setActiveStep] = useState(0);
     // Fix: Use ReturnType<typeof setInterval> to correctly type the ref for both browser (number) and Node.js (Timeout) environments.
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -961,13 +1003,61 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const stepsData = [
-        { title: 'step1Title', p: 'step1P', image: model0Url },
-        { title: 'step2Title', p: 'step2P' },
-        { title: 'step3Title', p: 'step3P' },
-        { title: 'step4Title', p: 'step4P' },
-    ];
-    
+    const heroSequence = useMemo<HeroFrame[]>(() => {
+        if (heroFrames.length) {
+            return heroFrames;
+        }
+        if (model0Url) {
+            const baseSource = HERO_SOURCE_FILES[0];
+            return [{ ...baseSource, url: model0Url }];
+        }
+        return [];
+    }, [heroFrames, model0Url]);
+
+    const [activeHeroFrame, setActiveHeroFrame] = useState(0);
+    const heroSequenceLength = heroSequence.length;
+
+    useEffect(() => {
+        setActiveHeroFrame(0);
+    }, [heroSequenceLength]);
+
+    useEffect(() => {
+        if (heroSequenceLength <= 1) {
+            return;
+        }
+        const id = window.setInterval(() => {
+            setActiveHeroFrame(prev => (prev + 1) % heroSequenceLength);
+        }, 3600);
+        return () => window.clearInterval(id);
+    }, [heroSequenceLength]);
+
+    const getHeroLabel = useCallback((frame?: HeroFrame) => {
+        if (!frame) {
+            return t('heroLoading');
+        }
+        const localized = t(frame.labelKey);
+        return localized !== frame.labelKey ? localized : frame.fallbackLabel;
+    }, [t]);
+
+    const stepsData = useMemo(() => {
+        const fallbackFrame = heroSequence[0];
+        const stepFrames: (HeroFrame | undefined)[] = [
+            heroSequence[0] ?? fallbackFrame,
+            heroSequence[1] ?? heroSequence[0] ?? fallbackFrame,
+            heroSequence[2] ?? heroSequence[1] ?? heroSequence[0] ?? fallbackFrame,
+            heroSequence[3] ?? heroSequence[2] ?? heroSequence[1] ?? heroSequence[0] ?? fallbackFrame,
+        ];
+        return [
+            { title: 'step1Title', p: 'step1P', frame: stepFrames[0] },
+            { title: 'step2Title', p: 'step2P', frame: stepFrames[1] },
+            { title: 'step3Title', p: 'step3P', frame: stepFrames[2] },
+            { title: 'step4Title', p: 'step4P', frame: stepFrames[3] },
+        ];
+    }, [heroSequence]);
+
+    const heroCaption = heroSequence.length ? getHeroLabel(heroSequence[activeHeroFrame]) : t('heroLoading');
+    const totalSteps = stepsData.length;
+
     const stopAutoScroll = () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -975,9 +1065,9 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const startAutoScroll = useCallback(() => {
         stopAutoScroll();
         intervalRef.current = setInterval(() => {
-            setActiveStep(prev => (prev + 1) % stepsData.length);
+            setActiveStep(prev => (prev + 1) % totalSteps);
         }, 2000); // 2 seconds per step
-    }, [stepsData.length]);
+    }, [totalSteps]);
 
     useEffect(() => {
         if (!isManuallyPaused) {
@@ -1031,7 +1121,34 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                         </button>
                     </div>
                     <div className="intro-image-container">
-                        {model0Url && <img src={model0Url} alt={t('explainerIntroTitle')} className="hero-image-preview" />}
+                        <div className="hero-showcase">
+                            <div className="sticker-burst">
+                                {heroSequence.slice(1, 4).map((frame, index) => (
+                                    <img
+                                        key={`burst-${frame.id}`}
+                                        src={frame.url}
+                                        alt={getHeroLabel(frame)}
+                                        className={`burst-frame burst-frame-${index}`}
+                                    />
+                                ))}
+                            </div>
+                            {heroSequence.map((frame, index) => (
+                                <img
+                                    key={frame.id}
+                                    src={frame.url}
+                                    alt={getHeroLabel(frame)}
+                                    className={`hero-frame ${index === activeHeroFrame ? 'is-active' : ''}`}
+                                />
+                            ))}
+                            {!heroSequence.length && (
+                                <div className="hero-placeholder">
+                                    <div className="spinner"></div>
+                                </div>
+                            )}
+                            {heroSequence.length > 0 && (
+                                <div className="hero-caption">{heroCaption}</div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </section>
@@ -1048,7 +1165,13 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                             <div key={step.title} className={`step-card ${index === activeStep ? 'active' : ''}`}>
                                 <div className="step-icon">{index + 1}</div>
                                 <h3>{t(step.title)}</h3>
-                                {step.image && <img src={step.image} alt={t(step.title)} className="step-image-preview" />}
+                                {step.frame && (
+                                    <img
+                                        src={step.frame.url}
+                                        alt={getHeroLabel(step.frame)}
+                                        className="step-image-preview"
+                                    />
+                                )}
                                 <p>{t(step.p)}</p>
                             </div>
                         ))}
