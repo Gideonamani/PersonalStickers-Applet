@@ -5,7 +5,8 @@ export const generatePrompt = (
     artisticStyle: string,
     transparentBackground: boolean,
     backgroundColor: string,
-    translations: Translations
+    translations: Translations,
+    feedback?: string
 ): string => {
     const styleMap: Record<string, string> = {
         Anime: 'a vibrant anime/manga cel-shaded style with bold, tidy linework',
@@ -40,6 +41,17 @@ export const generatePrompt = (
 
     const optimisationNote =
         'Optimise the artwork for use as a WhatsApp chat sticker so it reads clearly at small size and removes cleanly with transparency tools.';
+
+    if (feedback) {
+        // Regeneration prompt
+        return `You are an expert AI image editor. You will receive a source character photo, a previously generated sticker, and user feedback.
+        Your task is to EDIT the sticker based on this user feedback: "${feedback}".
+        Refine the sticker while keeping the character's identity (from the source photo) and the overall "${englishLabel}" expression consistent.
+        The artistic style MUST be ${styleInstruction}. The sticker must have ${backgroundInstruction}. ${outlineInstruction}
+        Ensure the subject remains centred, fully inside the 512x512 PNG frame, and maintains consistent skin tone, clothing, and hairstyle with the source photo.
+        Keep the edges sharp with minimal anti-aliasing to support clean background removal.
+        Output a single, updated PNG image and nothing else.`;
+    }
 
     return `Generate a 512x512 PNG sticker featuring the same character showing a "${englishLabel}" expression. ${framingInstruction} The artistic style MUST be ${styleInstruction}. ${optimisationNote} Ensure the subject remains centred, fully inside the frame, and maintains consistent skin tone, clothing, and hairstyle with previous stickers from the user photo reference. The sticker must have ${backgroundInstruction}. ${outlineInstruction} Keep the edges sharp with minimal anti-aliasing to support clean background removal. Output a single PNG image and nothing else.`;
 };
