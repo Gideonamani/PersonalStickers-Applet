@@ -176,6 +176,7 @@ main {
     align-items: center;
     justify-content: center;
     padding-bottom: 2.5rem;
+    min-height: clamp(220px, 60vw, 320px);
 }
 
 .hero-frame {
@@ -1534,6 +1535,7 @@ main {
     .hero-showcase {
         max-width: 260px;
         padding-bottom: 1.8rem;
+        min-height: clamp(200px, 70vw, 260px);
     }
 
     .hero-caption {
