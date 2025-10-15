@@ -10,10 +10,17 @@ export type Expression = {
     isDefault: boolean;
 };
 
+export type ImageMeta = {
+    width: number;
+    height: number;
+    byteSize: number;
+};
+
 export type Sticker = Expression & {
     imageUrl: string | null; // The final image to display/download
     originalImageUrl: string | null; // The raw image from the AI, for reprocessing
     status: StickerStatus;
+    imageMeta: ImageMeta | null;
 };
 
 export type TransparencyOptions = {
