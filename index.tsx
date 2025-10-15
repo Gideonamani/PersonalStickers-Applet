@@ -9,7 +9,7 @@ import JSZip from 'jszip';
 import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
 
 import { 
-    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize, TransparencySeed 
+    Language, ExpressionType, Expression, Sticker, TransparencyOptions, GridSize, TransparencySeed, ImageMeta 
 } from './types';
 import { 
     DownloadIcon, BinIcon, EditIcon, RefreshIcon, AddIcon, CameraIcon, 
@@ -20,6 +20,26 @@ import { generatePrompt } from './utils/prompt-generator';
 import { normalizeImageSize, MAX_STICKER_DIMENSION, dataUrlToBlob } from './utils/image';
 
 import './index.css';
+
+const getDataUrlByteSize = (dataUrl: string): number => {
+    const commaIndex = dataUrl.indexOf(',');
+    if (commaIndex === -1) {
+        return 0;
+    }
+    const base64 = dataUrl.slice(commaIndex + 1);
+    const padding = (base64.match(/=+$/) || [''])[0].length;
+    return Math.floor(base64.length * 0.75) - padding;
+};
+
+const formatBytes = (bytes: number): string => {
+    if (!bytes || bytes < 0) {
+        return '0 B';
+    }
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, exponent);
+    return `${value < 10 && exponent > 0 ? value.toFixed(1) : Math.round(value)} ${units[exponent]}`;
+};
 
 type HeroFrameSource = {
     id: string;
@@ -238,7 +258,7 @@ const ImageCropper = ({
     onCancel,
   }: {
     imageSrc: string;
-    onSave: (croppedImageDataUrl: string) => void;
+    onSave: (result: { dataUrl: string; width: number; height: number; }) => void;
     onCancel: () => void;
   }) => {
     const { t } = useLanguage();
@@ -278,8 +298,8 @@ const ImageCropper = ({
             completedCrop.height
           );
           const base64Image = canvas.toDataURL('image/png');
-          const { dataUrl } = await normalizeImageSize(base64Image, MAX_STICKER_DIMENSION);
-          onSave(dataUrl);
+          const { dataUrl, width, height } = await normalizeImageSize(base64Image, MAX_STICKER_DIMENSION);
+          onSave({ dataUrl, width, height });
         }
       }
     };
@@ -327,7 +347,7 @@ const StickerCreator = ({
   onArtisticStyleChange,
   onRestoreDefaults,
 }: {
-  characterImage: string | null;
+  characterImage: { data: string; width: number; height: number; byteSize: number; } | null;
   onRequestImage: () => void;
   onGenerate: () => void;
   isLoading: boolean;
@@ -341,6 +361,9 @@ const StickerCreator = ({
 }) => {
   const { t } = useLanguage();
   const [isDragging, setIsDragging] = useState(false);
+  const displayMeta = characterImage
+    ? `${characterImage.width}×${characterImage.height} px • ${formatBytes(characterImage.byteSize)}`
+    : null;
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -366,24 +389,27 @@ const StickerCreator = ({
 
   return (
     <div className="sticker-creator">
-      <div
-        className={`character-display ${isDragging ? 'drag-over' : ''}`}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={onRequestImage}
-        role="button"
-        tabIndex={0}
-      >
-        {characterImage ? (
-            <img src={characterImage} alt="Uploaded character" className="character-image" />
-        ) : (
-            <div className="character-placeholder">
-              <span>📷</span>
-              <span className="placeholder-text">{t('uploadPlaceholder')}</span>
-            </div>
-        )}
+      <div className="character-display-wrapper">
+        <div
+          className={`character-display ${isDragging ? 'drag-over' : ''}`}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={onRequestImage}
+          role="button"
+          tabIndex={0}
+        >
+          {characterImage ? (
+              <img src={characterImage.data} alt="Uploaded character" className="character-image" />
+          ) : (
+              <div className="character-placeholder">
+                <CameraIcon className="placeholder-icon" />
+                <span className="placeholder-text">{t('uploadPlaceholder')}</span>
+              </div>
+          )}
+        </div>
+        {displayMeta && <div className="character-meta">{displayMeta}</div>}
       </div>
       <div className="creator-controls">
         <h2>{t('creatorTitle')}</h2>
@@ -928,6 +954,12 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
         )}
         <div className="sticker-placeholder">
             {renderContent()}
+            {sticker.status === 'done' && sticker.imageMeta && (
+                <div className="sticker-meta-overlay">
+                    <span>{`${sticker.imageMeta.width}×${sticker.imageMeta.height} px`}</span>
+                    <span>{formatBytes(sticker.imageMeta.byteSize)}</span>
+                </div>
+            )}
             <div className="sticker-label">
                 <span>{displayLabel}</span>
                 {sticker.imageUrl && sticker.status === 'done' && (
@@ -1244,7 +1276,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   ], []);
 
   const [expressions, setExpressions] = useState<Expression[]>([]);
-  const [userImage, setUserImage] = useState<{ data: string; mimeType: string; } | null>(null);
+  const [userImage, setUserImage] = useState<{ data: string; mimeType: string; width: number; height: number; byteSize: number; } | null>(null);
   const [originalFilename, setOriginalFilename] = useState<string | null>(null);
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -1336,7 +1368,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     setStickers(prevStickers => {
       const newStickers = expressions.map(exp => {
         const existingSticker = prevStickers.find(s => s.label === exp.label);
-        return existingSticker || { ...exp, imageUrl: null, originalImageUrl: null, status: 'idle' as const };
+        return existingSticker || { ...exp, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null };
       });
       return newStickers.filter(s => expressions.some(e => e.label === s.label));
     });
@@ -1417,12 +1449,16 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     setCropModalOpen(true);
   };
 
-  const handleCropSave = (croppedImageDataUrl: string) => {
+  const handleCropSave = (croppedImage: { dataUrl: string; width: number; height: number; }) => {
+    const byteSize = getDataUrlByteSize(croppedImage.dataUrl);
     setUserImage({
-      data: croppedImageDataUrl,
+      data: croppedImage.dataUrl,
       mimeType: 'image/png',
+      width: croppedImage.width,
+      height: croppedImage.height,
+      byteSize,
     });
-    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null })));
     setError(null);
     setCropModalOpen(false);
   };
@@ -1433,7 +1469,17 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   };
 
   const handleSaveTransparency = (label: string, newImageUrl: string) => {
-    setStickers(prev => prev.map(s => s.label === label ? { ...s, imageUrl: newImageUrl } : s));
+    const newByteSize = getDataUrlByteSize(newImageUrl);
+    setStickers(prev => prev.map(s => {
+      if (s.label !== label) {
+        return s;
+      }
+      const existingMeta = s.imageMeta;
+      const updatedMeta = existingMeta
+        ? { ...existingMeta, byteSize: newByteSize || existingMeta.byteSize }
+        : null;
+      return { ...s, imageUrl: newImageUrl, imageMeta: updatedMeta };
+    }));
     setEditingSticker(null);
   };
 
@@ -1441,7 +1487,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const generateSticker = async (expression: Expression) => {
     if (!userImage) return; // Should be checked before calling
 
-    setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const } : s));
+    setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const, imageMeta: null } : s));
     
     const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
     
@@ -1458,7 +1504,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
         if (imagePart?.inlineData) {
             const baseMime = imagePart.inlineData.mimeType || 'image/png';
             const rawImageUrl = `data:${baseMime};base64,${imagePart.inlineData.data}`;
-            const { dataUrl: constrainedOriginal } = await normalizeImageSize(rawImageUrl, MAX_STICKER_DIMENSION);
+            const { dataUrl: constrainedOriginal, width, height } = await normalizeImageSize(rawImageUrl, MAX_STICKER_DIMENSION);
             let processedImageUrl = constrainedOriginal;
 
             if (transparentBackground) {
@@ -1471,14 +1517,18 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                     console.warn(`Could not process image for transparency, falling back to original.`, processError);
                 }
             }
-            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl: constrainedOriginal, status: 'done' as const } : s));
+
+            const finalByteSize = getDataUrlByteSize(processedImageUrl);
+            const imageMeta: ImageMeta = { width, height, byteSize: finalByteSize };
+
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl: constrainedOriginal, status: 'done' as const, imageMeta } : s));
         } else {
             console.warn(`No image generated for: ${expression.label}`);
-            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const, imageMeta: null } : s));
         }
     } catch(err) {
         console.error(`Error generating sticker for ${expression.label}:`, err);
-        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const } : s));
+        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const, imageMeta: null } : s));
     }
   };
 
@@ -1488,7 +1538,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     
     setIsLoading(true);
     setError(null);
-    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const })));
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null })));
 
     try {
       for (const expression of expressions) {
@@ -1557,7 +1607,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           URL.revokeObjectURL(sticker.originalImageUrl);
         }
       });
-      return defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const }));
+      return defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null }));
     });
 
     setUserImage(null);
@@ -1579,7 +1629,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     }
   };
 
-  const characterImage = userImage?.data || null;
+  const characterImage = userImage;
   const hasGeneratedStickers = stickers.some(s => s.imageUrl);
   const hasGenerationStarted = stickers.some(s => s.status !== 'idle');
 
