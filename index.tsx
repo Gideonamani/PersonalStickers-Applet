@@ -404,7 +404,7 @@ const StickerCreator = ({
               <img src={characterImage.data} alt="Uploaded character" className="character-image" />
           ) : (
               <div className="character-placeholder">
-                <CameraIcon className="placeholder-icon" />
+                <span className="placeholder-emoji">📷</span>
                 <span className="placeholder-text">{t('uploadPlaceholder')}</span>
               </div>
           )}

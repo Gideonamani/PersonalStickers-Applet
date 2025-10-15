@@ -796,14 +796,8 @@ main {
   transition: border-color 0.2s, background-color 0.2s, color 0.2s;
 }
 
-.placeholder-icon {
-  width: 64px;
-  height: 64px;
-  color: #bdbdbd;
-}
-
-.character-placeholder span:first-child {
-    font-size: 4rem;
+.placeholder-emoji {
+  font-size: 4rem;
 }
 
 .placeholder-text {
@@ -818,11 +812,6 @@ main {
     border-color: #4a90e2;
     background-color: #e9f2fd;
     color: #4a90e2;
-}
-
-.character-display:hover .placeholder-icon,
-.character-display.drag-over .placeholder-icon {
-  color: #4a90e2;
 }
 
 .creator-controls {
