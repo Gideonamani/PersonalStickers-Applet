@@ -52,6 +52,28 @@ type HeroFrame = HeroFrameSource & {
     url: string;
 };
 
+type CarouselFrameSource = {
+    id: string;
+    labelKey: string;
+    fallbackLabel: string;
+    file: string;
+};
+
+type CarouselFrame = CarouselFrameSource & {
+    url: string;
+};
+
+type StepCardImage = {
+    url: string;
+    alt: string;
+};
+
+type StepCardContent = {
+    title: string;
+    p: string;
+    image?: StepCardImage;
+};
+
 type BurstCorner = 'tl' | 'tr' | 'br' | 'bl';
 
 const CORNER_SEQUENCE: BurstCorner[] = ['tl', 'tr', 'br', 'bl'];
@@ -97,6 +119,12 @@ const HERO_SOURCE_FILES: HeroFrameSource[] = [
     { id: 'model4', labelKey: 'heroVariantLaugh', fallbackLabel: 'Laughing sticker', file: 'Model_4.png' },
     { id: 'model5', labelKey: 'heroVariantFocused', fallbackLabel: 'Focused sticker', file: 'Model_5.png' },
     { id: 'model6', labelKey: 'heroVariantDreamy', fallbackLabel: 'Dreamy sticker', file: 'Model_6.png' },
+];
+
+const CAROUSEL_SOURCE_FILES: CarouselFrameSource[] = [
+    { id: 'customize', labelKey: 'carouselCustomizeAlt', fallbackLabel: 'Customize your sticker preview', file: 'carousel/Carou_customize.png' },
+    { id: 'addExpressions', labelKey: 'carouselAddExpressionsAlt', fallbackLabel: 'Add expressions preview', file: 'carousel/Carou_add_exp.png' },
+    { id: 'generateDownload', labelKey: 'carouselGenerateDownloadAlt', fallbackLabel: 'Generate and download preview', file: 'carousel/Carou_gen_download.png' },
 ];
 
 // --- Localization ---
@@ -162,6 +190,7 @@ interface AssetContextType {
     model0Url: string;
     heroFrames: HeroFrame[];
     assetsReady: boolean;
+    carouselFrames: CarouselFrame[];
 }
 
 const AssetContext = createContext<AssetContextType | undefined>(undefined);
@@ -177,6 +206,7 @@ const useAssets = () => {
 const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [model0Url, setModel0Url] = useState('');
     const [heroFrames, setHeroFrames] = useState<HeroFrame[]>([]);
+    const [carouselFrames, setCarouselFrames] = useState<CarouselFrame[]>([]);
     const [assetsReady, setAssetsReady] = useState(false);
 
     useEffect(() => {
@@ -216,8 +246,43 @@ const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         };
     }, []);
 
+    useEffect(() => {
+        const objectUrls: string[] = [];
+        let cancelled = false;
+
+        const loadCarouselAssets = async () => {
+            try {
+                const loadedFrames = await Promise.all(
+                    CAROUSEL_SOURCE_FILES.map(async (source) => {
+                        const response = await fetch(`./assets/${source.file}`);
+                        if (!response.ok) {
+                            throw new Error(`Failed to load ${source.file}`);
+                        }
+                        const blob = await response.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        objectUrls.push(objectUrl);
+                        return { ...source, url: objectUrl };
+                    })
+                );
+
+                if (!cancelled) {
+                    setCarouselFrames(loadedFrames);
+                }
+            } catch (error) {
+                console.error('Failed to load carousel assets', error);
+            }
+        };
+
+        loadCarouselAssets();
+
+        return () => {
+            cancelled = true;
+            objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        };
+    }, []);
+
     return (
-        <AssetContext.Provider value={{ model0Url, heroFrames, assetsReady }}>
+        <AssetContext.Provider value={{ model0Url, heroFrames, assetsReady, carouselFrames }}>
             {children}
         </AssetContext.Provider>
     );
@@ -1117,7 +1182,7 @@ const Footer = () => {
 
 const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const { t } = useLanguage();
-    const { model0Url, heroFrames, assetsReady } = useAssets();
+    const { model0Url, heroFrames, assetsReady, carouselFrames } = useAssets();
     const [activeStep, setActiveStep] = useState(0);
     // Fix: Use ReturnType<typeof setInterval> to correctly type the ref for both browser (number) and Node.js (Timeout) environments.
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1178,6 +1243,14 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     }, [heroSequenceLength]);
 
     const getHeroLabel = useCallback((frame?: HeroFrame) => {
+        if (!frame) {
+            return t('heroLoading');
+        }
+        const localized = t(frame.labelKey);
+        return localized !== frame.labelKey ? localized : frame.fallbackLabel;
+    }, [t]);
+
+    const getCarouselLabel = useCallback((frame?: CarouselFrame) => {
         if (!frame) {
             return t('heroLoading');
         }
@@ -1258,21 +1331,43 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
         };
     }, [assetsReady, activeHeroFrame, heroSequenceLength, isBursting, triggerBurst, hasStarted]);
 
-    const stepsData = useMemo(() => {
+    const stepsData = useMemo<StepCardContent[]>(() => {
         const fallbackFrame = heroSequence[0];
-        const stepFrames: (HeroFrame | undefined)[] = [
+        const heroFallbacks: (HeroFrame | undefined)[] = [
             heroSequence[0] ?? fallbackFrame,
             heroSequence[1] ?? heroSequence[0] ?? fallbackFrame,
             heroSequence[2] ?? heroSequence[1] ?? heroSequence[0] ?? fallbackFrame,
             heroSequence[3] ?? heroSequence[2] ?? heroSequence[1] ?? heroSequence[0] ?? fallbackFrame,
         ];
+
+        const customizeFrame = carouselFrames.find((frame) => frame.id === 'customize');
+        const addExpressionsFrame = carouselFrames.find((frame) => frame.id === 'addExpressions');
+        const generateDownloadFrame = carouselFrames.find((frame) => frame.id === 'generateDownload');
+
+        const uploadImage = heroFallbacks[0] ? { url: heroFallbacks[0].url, alt: getHeroLabel(heroFallbacks[0]) } : undefined;
+        const customizeImage = customizeFrame
+            ? { url: customizeFrame.url, alt: getCarouselLabel(customizeFrame) }
+            : heroFallbacks[1]
+                ? { url: heroFallbacks[1].url, alt: getHeroLabel(heroFallbacks[1]) }
+                : undefined;
+        const addExpressionsImage = addExpressionsFrame
+            ? { url: addExpressionsFrame.url, alt: getCarouselLabel(addExpressionsFrame) }
+            : heroFallbacks[2]
+                ? { url: heroFallbacks[2].url, alt: getHeroLabel(heroFallbacks[2]) }
+                : undefined;
+        const generateDownloadImage = generateDownloadFrame
+            ? { url: generateDownloadFrame.url, alt: getCarouselLabel(generateDownloadFrame) }
+            : heroFallbacks[3]
+                ? { url: heroFallbacks[3].url, alt: getHeroLabel(heroFallbacks[3]) }
+                : undefined;
+
         return [
-            { title: 'step1Title', p: 'step1P', frame: stepFrames[0] },
-            { title: 'step2Title', p: 'step2P', frame: stepFrames[1] },
-            { title: 'step3Title', p: 'step3P', frame: stepFrames[2] },
-            { title: 'step4Title', p: 'step4P', frame: stepFrames[3] },
+            { title: 'step1Title', p: 'step1P', image: uploadImage },
+            { title: 'step2Title', p: 'step2P', image: customizeImage },
+            { title: 'step3Title', p: 'step3P', image: addExpressionsImage },
+            { title: 'step4Title', p: 'step4P', image: generateDownloadImage },
         ];
-    }, [heroSequence]);
+    }, [carouselFrames, getCarouselLabel, getHeroLabel, heroSequence]);
 
     const heroCaption = heroSequence.length ? getHeroLabel(heroSequence[activeHeroFrame]) : t('heroLoading');
     const totalSteps = stepsData.length;
@@ -1399,10 +1494,10 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                             <div key={step.title} className={`step-card ${index === activeStep ? 'active' : ''}`}>
                                 <div className="step-icon">{index + 1}</div>
                                 <h3>{t(step.title)}</h3>
-                                {step.frame && (
+                                {step.image && (
                                     <img
-                                        src={step.frame.url}
-                                        alt={getHeroLabel(step.frame)}
+                                        src={step.image.url}
+                                        alt={step.image.alt}
                                         className="step-image-preview"
                                     />
                                 )}
