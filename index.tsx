@@ -52,6 +52,43 @@ type HeroFrame = HeroFrameSource & {
     url: string;
 };
 
+type BurstCorner = 'tl' | 'tr' | 'br' | 'bl';
+
+const CORNER_SEQUENCE: BurstCorner[] = ['tl', 'tr', 'br', 'bl'];
+const HERO_DISPLAY_DURATION = 4000;
+const BURST_ANIMATION_DURATION = HERO_DISPLAY_DURATION * 0.95;
+
+const CORNER_STYLES: Record<BurstCorner, React.CSSProperties> = {
+    tl: {
+        '--to-x': '-100%',
+        '--to-y': '-100%',
+        '--start-rot': '-14deg',
+        '--peak-rot': '-4deg',
+        '--end-rot': '-10deg',
+    } as React.CSSProperties,
+    tr: {
+        '--to-x': '100%',
+        '--to-y': '-100%',
+        '--start-rot': '14deg',
+        '--peak-rot': '4deg',
+        '--end-rot': '8deg',
+    } as React.CSSProperties,
+    br: {
+        '--to-x': '100%',
+        '--to-y': '102%',
+        '--start-rot': '12deg',
+        '--peak-rot': '3deg',
+        '--end-rot': '6deg',
+    } as React.CSSProperties,
+    bl: {
+        '--to-x': '-100%',
+        '--to-y': '102%',
+        '--start-rot': '-12deg',
+        '--peak-rot': '-3deg',
+        '--end-rot': '-6deg',
+    } as React.CSSProperties,
+};
+
 const HERO_SOURCE_FILES: HeroFrameSource[] = [
     { id: 'model0', labelKey: 'heroOriginalCaption', fallbackLabel: 'Original upload', file: 'Model_0.png' },
     { id: 'model1', labelKey: 'heroVariantHappy', fallbackLabel: 'Happy sticker', file: 'Model_1.png' },
@@ -124,6 +161,7 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
 interface AssetContextType {
     model0Url: string;
     heroFrames: HeroFrame[];
+    assetsReady: boolean;
 }
 
 const AssetContext = createContext<AssetContextType | undefined>(undefined);
@@ -139,6 +177,7 @@ const useAssets = () => {
 const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [model0Url, setModel0Url] = useState('');
     const [heroFrames, setHeroFrames] = useState<HeroFrame[]>([]);
+    const [assetsReady, setAssetsReady] = useState(false);
 
     useEffect(() => {
         const objectUrls: string[] = [];
@@ -162,6 +201,7 @@ const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 if (!cancelled) {
                     setHeroFrames(loadedFrames);
                     setModel0Url(loadedFrames[0]?.url ?? '');
+                    setAssetsReady(true);
                 }
             } catch (error) {
                 console.error('Failed to load hero showcase assets', error);
@@ -177,7 +217,7 @@ const AssetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }, []);
 
     return (
-        <AssetContext.Provider value={{ model0Url, heroFrames }}>
+        <AssetContext.Provider value={{ model0Url, heroFrames, assetsReady }}>
             {children}
         </AssetContext.Provider>
     );
@@ -1072,7 +1112,7 @@ const Footer = () => {
 
 const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
     const { t } = useLanguage();
-    const { model0Url, heroFrames } = useAssets();
+    const { model0Url, heroFrames, assetsReady } = useAssets();
     const [activeStep, setActiveStep] = useState(0);
     // Fix: Use ReturnType<typeof setInterval> to correctly type the ref for both browser (number) and Node.js (Timeout) environments.
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1098,19 +1138,38 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
 
     const [activeHeroFrame, setActiveHeroFrame] = useState(0);
     const heroSequenceLength = heroSequence.length;
+    const [hasStarted, setHasStarted] = useState(false);
+    const [isBursting, setIsBursting] = useState(false);
+    const [cornerOrder, setCornerOrder] = useState<BurstCorner[]>(CORNER_SEQUENCE);
+    const [burstFrames, setBurstFrames] = useState<HeroFrame[]>([]);
+    const [burstKey, setBurstKey] = useState(0);
+    const burstCycleRef = useRef(0);
+    const burstFrameOffsetRef = useRef(0);
+    const heroTimerRef = useRef<number | null>(null);
+    const burstTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
-        setActiveHeroFrame(0);
-    }, [heroSequenceLength]);
+        return () => {
+            if (heroTimerRef.current) {
+                window.clearTimeout(heroTimerRef.current);
+                heroTimerRef.current = null;
+            }
+            if (burstTimerRef.current) {
+                window.clearTimeout(burstTimerRef.current);
+                burstTimerRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
-        if (heroSequenceLength <= 1) {
+        if (!heroSequenceLength) {
             return;
         }
-        const id = window.setInterval(() => {
-            setActiveHeroFrame(prev => (prev + 1) % heroSequenceLength);
-        }, 3600);
-        return () => window.clearInterval(id);
+        setActiveHeroFrame(0);
+        burstCycleRef.current = 0;
+        burstFrameOffsetRef.current = 0;
+        setCornerOrder(CORNER_SEQUENCE);
+        setHasStarted(false);
     }, [heroSequenceLength]);
 
     const getHeroLabel = useCallback((frame?: HeroFrame) => {
@@ -1120,6 +1179,79 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
         const localized = t(frame.labelKey);
         return localized !== frame.labelKey ? localized : frame.fallbackLabel;
     }, [t]);
+
+    const triggerBurst = useCallback(() => {
+        if (heroSequenceLength <= 1) {
+            return;
+        }
+
+        if (heroTimerRef.current) {
+            window.clearTimeout(heroTimerRef.current);
+            heroTimerRef.current = null;
+        }
+
+        setHasStarted(true);
+
+        const nextIndex = (activeHeroFrame + 1) % heroSequenceLength;
+        setActiveHeroFrame(nextIndex);
+
+        const candidates = heroSequence.filter((frame, index) => frame.id !== 'model0' && index !== nextIndex);
+
+        const targetCount = Math.min(4, candidates.length);
+        if (targetCount === 0) {
+            return;
+        }
+
+        const start = burstFrameOffsetRef.current % candidates.length;
+        const selected: HeroFrame[] = [];
+        for (let i = 0; i < targetCount; i++) {
+            selected.push(candidates[(start + i) % candidates.length]);
+        }
+        burstFrameOffsetRef.current = (start + 1) % candidates.length;
+
+        const cycleIndex = burstCycleRef.current % CORNER_SEQUENCE.length;
+        const order = CORNER_SEQUENCE.map((_, idx) => CORNER_SEQUENCE[(idx + cycleIndex) % CORNER_SEQUENCE.length]);
+
+        setCornerOrder(order);
+        setBurstFrames(selected);
+        setBurstKey(prev => prev + 1);
+        setIsBursting(true);
+
+        if (burstTimerRef.current) {
+            window.clearTimeout(burstTimerRef.current);
+        }
+        burstTimerRef.current = window.setTimeout(() => {
+            setIsBursting(false);
+            burstCycleRef.current += 1;
+            burstTimerRef.current = null;
+        }, BURST_ANIMATION_DURATION);
+    }, [heroSequence, heroSequenceLength, activeHeroFrame]);
+
+    useEffect(() => {
+        if (!assetsReady || heroSequenceLength <= 1 || isBursting) {
+            return;
+        }
+        if (heroTimerRef.current) {
+            window.clearTimeout(heroTimerRef.current);
+            heroTimerRef.current = null;
+        }
+        const idleDuration = Math.max(0, HERO_DISPLAY_DURATION - BURST_ANIMATION_DURATION);
+        const wait = hasStarted ? idleDuration : HERO_DISPLAY_DURATION;
+        if (wait === 0) {
+            triggerBurst();
+            return;
+        }
+        heroTimerRef.current = window.setTimeout(() => {
+            triggerBurst();
+        }, wait);
+
+        return () => {
+            if (heroTimerRef.current) {
+                window.clearTimeout(heroTimerRef.current);
+                heroTimerRef.current = null;
+            }
+        };
+    }, [assetsReady, activeHeroFrame, heroSequenceLength, isBursting, triggerBurst, hasStarted]);
 
     const stepsData = useMemo(() => {
         const fallbackFrame = heroSequence[0];
@@ -1203,17 +1335,32 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                         </button>
                     </div>
                     <div className="intro-image-container">
-                        <div className="hero-showcase">
-                            <div className="sticker-burst">
-                                {heroSequence.slice(1, 4).map((frame, index) => (
-                                    <img
-                                        key={`burst-${frame.id}`}
-                                        src={frame.url}
-                                        alt={getHeroLabel(frame)}
-                                        className={`burst-frame burst-frame-${index}`}
-                                    />
-                                ))}
-                            </div>
+                        <div className={`hero-showcase ${isBursting ? 'is-bursting' : ''}`}>
+                            {isBursting && (
+                                <div className="sticker-burst">
+                                    {burstFrames.map((frame, index) => {
+                                        const corner = cornerOrder[index % cornerOrder.length];
+                                        const staggerSpan = 0.25; // fraction of duration used for staggering
+                                        const delay =
+                                            burstFrames.length > 1
+                                                ? (index * (BURST_ANIMATION_DURATION * staggerSpan)) / (burstFrames.length - 1)
+                                                : 0;
+                                        return (
+                                            <img
+                                                key={`${frame.id}-${corner}-${burstKey}`}
+                                                src={frame.url}
+                                                alt={getHeroLabel(frame)}
+                                                className="burst-frame"
+                                                style={{
+                                                    ...CORNER_STYLES[corner],
+                                                    animationDelay: `${delay}ms`,
+                                                    animationDuration: `${BURST_ANIMATION_DURATION}ms`,
+                                                }}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            )}
                             {heroSequence.map((frame, index) => (
                                 <img
                                     key={frame.id}
@@ -1877,3 +2024,4 @@ root.render(
         <App />
     </React.StrictMode>
 );
+
