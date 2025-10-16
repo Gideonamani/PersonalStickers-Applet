@@ -1121,6 +1121,29 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
         return localized !== frame.labelKey ? localized : frame.fallbackLabel;
     }, [t]);
 
+    const burstFrames = useMemo(() => {
+        if (!heroSequence.length) {
+            return [];
+        }
+        const frames: HeroFrame[] = [];
+        const seen = new Set<string>();
+        const targetCount = Math.min(4, Math.max(heroSequence.length - 1, 0));
+        let offset = 1;
+        while (frames.length < targetCount && offset <= heroSequence.length + targetCount) {
+            const frame = heroSequence[(activeHeroFrame + offset) % heroSequence.length];
+            offset += 1;
+            if (frame.id === 'model0') {
+                continue;
+            }
+            if (seen.has(frame.id)) {
+                continue;
+            }
+            seen.add(frame.id);
+            frames.push(frame);
+        }
+        return frames;
+    }, [heroSequence, activeHeroFrame]);
+
     const stepsData = useMemo(() => {
         const fallbackFrame = heroSequence[0];
         const stepFrames: (HeroFrame | undefined)[] = [
@@ -1205,7 +1228,7 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
                     <div className="intro-image-container">
                         <div className="hero-showcase">
                             <div className="sticker-burst">
-                                {heroSequence.slice(1, 4).map((frame, index) => (
+                                {burstFrames.map((frame, index) => (
                                     <img
                                         key={`burst-${frame.id}`}
                                         src={frame.url}
