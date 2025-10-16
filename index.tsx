@@ -993,7 +993,12 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
             case 'done':
                 return <img src={sticker.imageUrl!} alt={displayLabel} className="sticker-image" />;
             case 'error':
-                return <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>;
+                return (
+                    <div className="sticker-error-content">
+                        <span className="sticker-emoji" role="img" aria-label={t('stickerError')}>⚠️</span>
+                        {sticker.errorMessage && <span className="sticker-error-message">{sticker.errorMessage}</span>}
+                    </div>
+                );
             case 'idle':
             default:
                 if (sticker.type === 'expressive') {
@@ -1656,7 +1661,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
       height: croppedImage.height,
       byteSize,
     });
-    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null })));
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null, errorMessage: undefined })));
     setError(null);
     setCropModalOpen(false);
   };
@@ -1685,7 +1690,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const generateSticker = async (expression: Expression, regenerationInfo?: { feedback: string; stickerToRegenerate: Sticker }) => {
     if (!userImage) return;
 
-    setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const, imageMeta: null } : s));
+    setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const, imageMeta: null, errorMessage: undefined } : s));
     
     const contentParts: ({ inlineData: { data: string; mimeType: string; }; } | { text: string; })[] = [];
 
@@ -1742,12 +1747,24 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
             setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, imageUrl: processedImageUrl, originalImageUrl: constrainedOriginal, status: 'done' as const, imageMeta } : s));
         } else {
-            console.warn(`No image generated for: ${expression.label}`);
-            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const, imageMeta: null } : s));
+            console.warn(`No image generated for: ${expression.label}`, response);
+            let errorMessage = t('errorGenericGeneration');
+            const candidate = response.candidates?.[0];
+            if (candidate) {
+                if (candidate.finishReason === 'SAFETY') {
+                    errorMessage = t('errorSafety');
+                } else if (candidate.finishReason === 'RECITATION') {
+                    errorMessage = t('errorRecitation');
+                }
+            } else if (response.promptFeedback?.blockReason) {
+                errorMessage = t('errorSafety');
+            }
+            setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const, imageMeta: null, errorMessage } : s));
         }
     } catch(err) {
         console.error(`Error generating sticker for ${expression.label}:`, err);
-        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const, imageMeta: null } : s));
+        const errorMessage = t('errorNetwork');
+        setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'error' as const, imageMeta: null, errorMessage } : s));
     }
   };
 
@@ -1757,7 +1774,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     
     setIsLoading(true);
     setError(null);
-    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null })));
+    setStickers(expressions.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null, errorMessage: undefined })));
 
     try {
       for (const expression of expressions) {
@@ -1839,7 +1856,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           URL.revokeObjectURL(sticker.originalImageUrl);
         }
       });
-      return defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null }));
+      return defaults.map(e => ({ ...e, imageUrl: null, originalImageUrl: null, status: 'idle' as const, imageMeta: null, errorMessage: undefined }));
     });
 
     setUserImage(null);
@@ -2024,4 +2041,3 @@ root.render(
         <App />
     </React.StrictMode>
 );
-
