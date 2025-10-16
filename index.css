@@ -734,6 +734,57 @@ main {
     cursor: not-allowed;
 }
 
+/* Regeneration Modal */
+.regeneration-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.regeneration-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.regeneration-preview img {
+    max-width: 150px;
+    height: auto;
+    border-radius: 4px;
+}
+
+.regeneration-preview p {
+    margin: 0;
+    font-weight: 500;
+    color: #333;
+}
+
+.regeneration-input {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.regeneration-input label {
+    font-weight: 500;
+    color: #333;
+}
+
+.regeneration-input textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+}
 
 /* Sticker Creator Section */
 .sticker-creator {

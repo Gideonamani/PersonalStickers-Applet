@@ -722,6 +722,56 @@ const TransparencyEditorModal = ({ sticker, onSave, onClose }: { sticker: Sticke
     );
 };
 
+const RegenerationModal = ({ sticker, onRegenerate, onClose }: { sticker: Sticker; onRegenerate: (label: string, feedback: string) => void; onClose: () => void; }) => {
+    const { t } = useLanguage();
+    const [feedback, setFeedback] = useState('');
+    const modalContentRef = useRef<HTMLDivElement>(null);
+    const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
+
+    const handleRegenerate = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (feedback.trim()) {
+            onRegenerate(sticker.label, feedback.trim());
+        }
+    };
+
+    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (modalContentRef.current && !modalContentRef.current.contains(e.target as Node)) {
+          onClose();
+        }
+    };
+
+    return (
+        <div className="modal-backdrop" onClick={handleBackdropClick}>
+            <div className="modal-content" ref={modalContentRef}>
+                <h3>{t('regenerateTitle')}</h3>
+                <form onSubmit={handleRegenerate} className="regeneration-modal-form">
+                    <div className="regeneration-preview">
+                        <img src={sticker.imageUrl!} alt={displayLabel} />
+                        <p>{displayLabel}</p>
+                    </div>
+                    <div className="regeneration-input">
+                        <label htmlFor="feedback-input">{t('regeneratePrompt')}</label>
+                        <textarea
+                            id="feedback-input"
+                            value={feedback}
+                            onChange={(e) => setFeedback(e.target.value)}
+                            placeholder={t('regeneratePlaceholder')}
+                            rows={4}
+                            required
+                            autoFocus
+                        />
+                    </div>
+                    <div className="modal-actions">
+                        <button type="button" onClick={onClose} className="modal-button secondary">{t('cancelButton')}</button>
+                        <button type="submit" className="modal-button primary" disabled={!feedback.trim()}>{t('regenerateButton')}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const CameraModal = ({ onPictureTaken, onClose }: { onPictureTaken: (imageDataUrl: string) => void; onClose: () => void; }) => {
     const { t } = useLanguage();
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -882,7 +932,7 @@ const ImageSourceModal = ({ onSelectFile, onSelectCamera, onClose }: { onSelectF
     );
 };
 
-const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
+const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null, onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (sticker: Sticker) => void; }> = ({ sticker, originalFilename, onRemove, onEdit, onRegenerate }) => {
     const { t } = useLanguage();
     const displayLabel = sticker.isDefault ? t(sticker.label) : sticker.label;
 
@@ -925,7 +975,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
                 {(sticker.status === 'done' || sticker.status === 'error') && (
                     <button
                         className="sticker-action-btn regenerate-btn"
-                        onClick={() => onRegenerate(sticker.label)}
+                        onClick={() => onRegenerate(sticker)}
                         aria-label={`${t('regenerateTooltip')} ${displayLabel}`}
                         title={t('regenerateTooltip')}
                     >
@@ -973,7 +1023,7 @@ const StickerItem: React.FC<{ sticker: Sticker, originalFilename: string | null,
     );
 };
 
-const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: (type: ExpressionType) => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (label: string) => void; }) => {
+const StickerGrid = ({ stickers, originalFilename, gridSize, onAddClick, onRemove, onEdit, onRegenerate }: { stickers: Sticker[]; originalFilename: string | null; gridSize: GridSize; onAddClick: (type: ExpressionType) => void; onRemove: (label: string) => void; onEdit: (sticker: Sticker) => void; onRegenerate: (sticker: Sticker) => void; }) => {
     const { t } = useLanguage();
     
     const plainStickers = stickers.filter(s => s.type === 'plain');
@@ -1291,6 +1341,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   const [gridSize, setGridSize] = useState<GridSize>('medium');
   const [expressionTypeToAdd, setExpressionTypeToAdd] = useState<ExpressionType | null>(null);
   const [editingSticker, setEditingSticker] = useState<Sticker | null>(null);
+  const [regeneratingSticker, setRegeneratingSticker] = useState<Sticker | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const LOCAL_STORAGE_KEY = 'stickerMeSession';
 
@@ -1484,19 +1535,40 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
   };
 
 
-  const generateSticker = async (expression: Expression) => {
-    if (!userImage) return; // Should be checked before calling
+  const generateSticker = async (expression: Expression, regenerationInfo?: { feedback: string; stickerToRegenerate: Sticker }) => {
+    if (!userImage) return;
 
     setStickers(prev => prev.map(s => s.label === expression.label ? { ...s, status: 'loading' as const, imageMeta: null } : s));
     
-    const sourceImage = { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType };
-    
+    const contentParts: ({ inlineData: { data: string; mimeType: string; }; } | { text: string; })[] = [];
+
+    // Always add the base character photo
+    contentParts.push({ inlineData: { data: dataUrlToBase64(userImage.data), mimeType: userImage.mimeType } });
+
+    // If regenerating, also add the sticker image that needs to be edited
+    if (regenerationInfo?.stickerToRegenerate?.imageUrl) {
+        contentParts.push({
+            inlineData: {
+                data: dataUrlToBase64(regenerationInfo.stickerToRegenerate.imageUrl),
+                mimeType: 'image/png' // It's always a PNG after our processing
+            }
+        });
+    }
+
     try {
-        const prompt = generatePrompt(expression, artisticStyle, transparentBackground, backgroundColor, translations);
+        const prompt = generatePrompt(
+            expression,
+            artisticStyle,
+            transparentBackground,
+            backgroundColor,
+            translations,
+            regenerationInfo?.feedback
+        );
+        contentParts.push({ text: prompt });
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
-            contents: { parts: [{ inlineData: sourceImage }, { text: prompt }] },
+            contents: { parts: contentParts },
             config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
         });
         
@@ -1552,15 +1624,28 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     }
   };
 
-  const handleRegenerate = async (label: string) => {
-    if (!userImage) { setError(t('errorUploadFirst')); return; }
+  const handleConfirmRegeneration = async (label: string, feedback: string) => {
+    if (!userImage) {
+        setError(t('errorUploadFirst'));
+        return;
+    }
+    const stickerToRegenerate = stickers.find(s => s.label === label);
+    if (!stickerToRegenerate || !stickerToRegenerate.imageUrl) {
+        console.error("Sticker not found or has no image for regeneration:", label);
+        return;
+    }
 
-    const expression = expressions.find(e => e.label === label);
-    if (!expression) { console.error("Expression not found for regeneration:", label); return; }
-
+    setRegeneratingSticker(null); // Close modal
     setError(null);
-    await generateSticker(expression);
-  };
+    
+    const expression = expressions.find(e => e.label === label);
+    if (!expression) {
+        console.error("Expression not found for regeneration:", label);
+        return;
+    }
+    
+    await generateSticker(expression, { feedback, stickerToRegenerate });
+};
 
   const handleDownloadAll = () => {
     const zip = new JSZip();
@@ -1621,6 +1706,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
     setGridSize('medium');
     setExpressionTypeToAdd(null);
     setEditingSticker(null);
+    setRegeneratingSticker(null);
     setCropModalOpen(false);
     setCameraModalOpen(false);
     setSourceModalOpen(false);
@@ -1687,6 +1773,13 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
                 onClose={() => setEditingSticker(null)}
             />
         )}
+        {regeneratingSticker && (
+            <RegenerationModal
+                sticker={regeneratingSticker}
+                onRegenerate={handleConfirmRegeneration}
+                onClose={() => setRegeneratingSticker(null)}
+            />
+        )}
 
         <StickerCreator
           characterImage={characterImage}
@@ -1736,7 +1829,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
           onAddClick={(type) => setExpressionTypeToAdd(type)}
           onRemove={handleRemoveExpression} 
           onEdit={setEditingSticker}
-          onRegenerate={handleRegenerate}
+          onRegenerate={setRegeneratingSticker}
         />
 
       </main>
