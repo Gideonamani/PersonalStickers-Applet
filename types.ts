@@ -21,6 +21,7 @@ export type Sticker = Expression & {
     originalImageUrl: string | null; // The raw image from the AI, for reprocessing
     status: StickerStatus;
     imageMeta: ImageMeta | null;
+    errorMessage?: string;
 };
 
 export type TransparencyOptions = {
