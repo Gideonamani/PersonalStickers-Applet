@@ -46,6 +46,10 @@ body {
   margin-top: 0;
   transform: translateY(-8px);
   pointer-events: none;
+  max-height: 0;
+  line-height: 0;
+  overflow: hidden;
+  display: none;
 }
 
 .header-center {
