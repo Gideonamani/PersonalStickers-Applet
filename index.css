@@ -14,17 +14,57 @@ body {
   color: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 1rem;
+  transition: padding 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+}
+
+.app-header.is-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(6px);
+  background-color: rgba(74, 144, 226, 0.9);
+}
+
+.app-header.is-collapsed {
+  padding: 0.75rem 1.25rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.app-header.is-collapsed .header-center {
+  gap: 0.25rem;
+}
+
+.app-header.is-collapsed h1 {
+  font-size: 1.6rem;
+}
+
+.app-header.is-collapsed .header-subtitle {
+  opacity: 0;
+  margin-top: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+.header-center {
+  grid-column: 2;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  transition: gap 0.3s ease;
 }
 
 .app-header h1 {
   margin: 0;
   font-size: 2rem;
   font-weight: 500;
-  grid-column: 2;
   text-align: center;
+  transition: font-size 0.3s ease;
 }
 
 .nav-home-btn {
@@ -102,20 +142,19 @@ main {
 }
 
 .app-header.explainer-header {
-    display: block; /* Override grid */
-    text-align: center;
-    padding: 3rem 1rem;
-    position: relative; /* Context for language switcher */
+    padding: 3rem 1.5rem;
 }
 
-.app-header.explainer-header h1 {
-    grid-column: auto;
+.app-header.explainer-header .header-center {
+    gap: 0.75rem;
 }
 
-.explainer-header .language-switcher {
-    position: absolute;
-    top: 1.25rem;
-    right: 1.25rem;
+.app-header.explainer-header:not(.is-collapsed) .header-center h1 {
+    font-size: clamp(2.25rem, 5vw, 3rem);
+}
+
+.app-header.explainer-header.is-collapsed {
+    padding: 0.75rem 1.25rem;
 }
 
 .header-subtitle {
@@ -123,6 +162,7 @@ main {
     opacity: 0.9;
     margin-top: 0.5rem;
     font-weight: 300;
+    transition: opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease;
 }
 
 .explainer-content {
@@ -1621,6 +1661,30 @@ main {
 
     .hero-image-preview {
         transform: rotate(0);
+    }
+}
+
+@media (max-width: 540px) {
+    .app-header {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+        row-gap: 0.75rem;
+        padding: 1rem 1.25rem;
+    }
+
+    .header-center {
+        grid-column: 1 / span 2;
+    }
+
+    .nav-home-btn {
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: start;
+    }
+
+    .language-switcher {
+        grid-column: 2;
+        grid-row: 1;
     }
 }
 
