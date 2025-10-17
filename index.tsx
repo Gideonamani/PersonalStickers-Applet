@@ -346,13 +346,57 @@ const LanguageSwitcher = () => {
     );
 };
 
-const Header = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
+type HeaderProps = {
+    onAction: () => void;
+    actionLabelKey: string;
+    titleKey?: string;
+    subtitleKey?: string;
+    collapseTitleKey?: string;
+    variant?: 'default' | 'explainer';
+};
+
+const Header = ({
+    onAction,
+    actionLabelKey,
+    titleKey = 'appName',
+    subtitleKey,
+    collapseTitleKey,
+    variant = 'default',
+}: HeaderProps) => {
     const { t } = useLanguage();
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            const collapseThreshold = variant === 'explainer' ? 120 : 60;
+            setIsCollapsed(window.scrollY > collapseThreshold);
+        };
+
+        handleScroll();
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [variant]);
+
+    const resolvedTitleKey = isCollapsed && collapseTitleKey ? collapseTitleKey : titleKey;
+    const titleText = t(resolvedTitleKey);
+
+    const headerClassName = [
+        'app-header',
+        variant === 'explainer' ? 'explainer-header' : '',
+        'is-sticky',
+        isCollapsed ? 'is-collapsed' : '',
+    ].filter(Boolean).join(' ');
+
     return (
-        <header className="app-header">
-          <button className="nav-home-btn" onClick={onNavigateHome}>{t('homeButton')}</button>
-          <h1>{t('appName')}</h1>
-          <LanguageSwitcher />
+        <header className={headerClassName}>
+            <button className="nav-home-btn" onClick={onAction}>
+                {t(actionLabelKey)}
+            </button>
+            <div className="header-center">
+                <h1>{titleText}</h1>
+                {subtitleKey ? <p className="header-subtitle">{t(subtitleKey)}</p> : null}
+            </div>
+            <LanguageSwitcher />
         </header>
     );
 };
@@ -1419,11 +1463,14 @@ const ExplainerPage = ({ onNavigate }: { onNavigate: () => void; }) => {
 
     return (
         <div className="explainer-page">
-            <header className="app-header explainer-header">
-                <LanguageSwitcher />
-                <h1>{t('explainerWelcome')}</h1>
-                <p className="header-subtitle">{t('explainerSubtitle')}</p>
-            </header>
+            <Header
+                onAction={onNavigate}
+                actionLabelKey="headerGenerateButton"
+                titleKey="explainerWelcome"
+                subtitleKey="explainerSubtitle"
+                collapseTitleKey="appName"
+                variant="explainer"
+            />
             <main className="explainer-content">
             <section className="explainer-intro">
                 <div className="intro-content-wrapper">
@@ -1980,7 +2027,7 @@ const StickerAppPage = ({ onNavigateHome }: { onNavigateHome: () => void }) => {
 
   return (
     <>
-      <Header onNavigateHome={onNavigateHome} />
+      <Header onAction={onNavigateHome} actionLabelKey="homeButton" />
       <main>
         <input
             type="file"
